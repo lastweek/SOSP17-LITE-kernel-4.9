@@ -330,8 +330,15 @@ int client_connect_loopback(struct ib_qp *src_qp, int port, int my_psn, enum ib_
 int client_setup_loopback_connections(ltc *ctx, int size, int rx_depth, int port)
 {
 	struct lite_dest loopback_in, loopback_out;
+	struct ib_cq_init_attr cq_attr;
+
 	spin_lock_init(&ctx->loopback_lock);
-	ctx->loopback_cq = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+1, 0);
+
+	cq_attr.cqe = rx_depth * 4 + 1;
+	cq_attr.comp_vector = 0;
+	cq_attr.flags = 0;
+
+	ctx->loopback_cq = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
 	if(!ctx->loopback_cq)
 	{
 		printk(KERN_ALERT "%s: Fail to create lookback_cq\n", __func__);
@@ -473,7 +480,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	int i;
 	int num_connections = MAX_CONNECTION;
 	ltc *ctx;
-
+	struct ib_cq_init_attr cq_attr_foo;
 
 	ctx = (ltc*)kmalloc(sizeof(ltc), GFP_KERNEL);
 	memset(ctx, 0, sizeof(ltc));
@@ -510,7 +517,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 
 	if(SGID_INDEX != -1)
 	{
-		if(ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &ctx->gid))
+		if(ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &ctx->gid, NULL))
 		{
 			printk(KERN_ALERT "Fail to query gid\n");
 			return NULL;
@@ -558,9 +565,14 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	ctx->cq = (struct ib_cq **)kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
 	for(i=0;i<NUM_POLLING_THREADS;i++)
 	{
-		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+1, 0);
-		if(!ctx->cq[i])
-		{
+		struct ib_cq_init_attr cq_attr;
+
+		cq_attr.cqe = rx_depth * 4 + 1;
+		cq_attr.comp_vector = 0;
+		cq_attr.flags = 0;
+
+		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
+		if (!ctx->cq[i]) {
 			printk(KERN_ALERT "Fail to create cq at %d/ ctx->cq\n", i);
 			return NULL;
 		}
@@ -633,13 +645,23 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	spin_lock_init(&ctx->connection_lockUD);
 	ctx->ah = (struct ib_ah **)kmalloc(MAX_NODE * sizeof(struct ib_ah*), GFP_KERNEL);
 	ctx->ah_attrUD = (struct client_ah_combined *)kmalloc(MAX_NODE * sizeof(struct client_ah_combined), GFP_KERNEL);
-	ctx->cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+1, 0);
+
+	cq_attr_foo.cqe = rx_depth * 4 + 1;
+	cq_attr_foo.comp_vector = 0;
+	cq_attr_foo.flags = 0;
+
+	ctx->cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr_foo);
 	if(!ctx->cqUD)
 	{
 		printk(KERN_ALERT "Fail to create cqUD\n");
 		return NULL;
 	}
-	ctx->send_cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+2, 0);
+
+	cq_attr_foo.cqe = rx_depth * 4 + 2;
+	cq_attr_foo.comp_vector = 0;
+	cq_attr_foo.flags = 0;
+
+	ctx->send_cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr_foo);
 	if(!ctx->send_cqUD)
 	{
 		printk(KERN_ALERT "Fail to create send_cqUD\n");
@@ -724,6 +746,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	{
 		struct ib_qp_attr attr, attr1;
                 struct ib_qp_init_attr init_attr;
+		struct ib_cq_init_attr cq_attr;
 
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
@@ -732,7 +755,11 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		ctx->send_cq[i] = ctx->send_cq[0];
                 #endif
                 #ifdef NON_SHARE_POLL_CQ_MODEL
-		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth+1, 0);
+		cq_attr.cqe = rx_depth + 1;
+		cq_attr.comp_vector = 0;
+		cq_attr.flags = 0;
+
+		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
 		//ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, 12000, 0);
                 #endif
 			init_attr.send_cq = ctx->send_cq[i];//ctx->cq
@@ -924,7 +951,7 @@ int client_gen_msg(ltc *ctx, char *msg, int connection_id)
 	my_dest.psn = client_get_random_number() & 0xffffff;
 	if(SGID_INDEX != -1)
 	{
-        	ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &my_dest.gid);
+        	ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &my_dest.gid, NULL);
 	}
 	client_gid_to_wire_gid(&my_dest.gid, gid);
 	sprintf(msg, "%04x:%04x:%06x:%06x:%s", my_dest.node_id, my_dest.lid, my_dest.qpn,my_dest.psn, gid);
