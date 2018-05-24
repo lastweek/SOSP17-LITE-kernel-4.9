@@ -1,0 +1,3 @@
+struct ib_send_wr
+ib_create_ib
+ib_query_gid
