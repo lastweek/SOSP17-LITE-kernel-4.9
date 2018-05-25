@@ -1125,11 +1125,17 @@ int client_post_receives_message_UD(ltc *ctx, int depth)
 	return depth;
 }
 
+/*
+ * Changed kernel API (struct msghdr) broke the following two kernel TCP functions.
+ * This version is known to work at 4.4 (or some version lower).
+ */
+
 /**
  * client_ktcp_recv: kernel space tcp connection - recv - for cluster intialization
  */
 int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
 {
+#if 0
 	struct msghdr msg;
 	struct kvec iov;
 
@@ -1153,7 +1159,25 @@ int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
 	//printk(KERN_INFO "ktcp_recved");tyh-
 	//printk("the message is : %s\n",buf);
 	return 0;
+#else
+	struct msghdr msg;
+	struct kvec iov;
 
+	if (!sock || !buf)
+		return -EINVAL;
+
+	iov.iov_base = buf;
+	iov.iov_len = len;
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+
+	kernel_recvmsg(sock, &msg, &iov, 1, len, 0);
+	return 0;
+#endif
 }
 
 /**
@@ -1161,7 +1185,7 @@ int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
  */
 int client_ktcp_send(struct socket *sock,char *buf,int len) 
 {
-
+#if 0
 	struct msghdr msg;
 	struct kvec iov;
 	//	printk(KERN_INFO "ktcp_send\n");
@@ -1186,6 +1210,25 @@ int client_ktcp_send(struct socket *sock,char *buf,int len)
 	kernel_sendmsg(sock,&msg,&iov, 1, iov.iov_len);
 	//printk(KERN_INFO "message sent!");
 	return 0;
+#else
+	struct msghdr msg;
+	struct kvec iov;
+
+	if (!sock || !buf)
+		return -EINVAL;
+
+	iov.iov_base = buf;
+	iov.iov_len = len;
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+
+	kernel_sendmsg(sock, &msg, &iov, 1, len);
+	return 0;
+#endif
 }
 
 /**
