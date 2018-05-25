@@ -3853,7 +3853,8 @@ EXPORT_SYMBOL(client_send_message_local_reply);
  */
 int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority)
 {	
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_ud_wr ud_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
 	int ret;
 	int ne, i;
@@ -3864,17 +3865,19 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 
 	spin_lock(&ctx->connection_lockUD);
 
-	memset(&wr, 0, sizeof(wr));
+	memset(&ud_wr, 0, sizeof(ud_wr));
 	memset(sge, 0, sizeof(struct ib_sge)*2);
 
-	wr.wr_id = type;
-	wr.opcode = IB_WR_SEND;
-	wr.sg_list = sge;
-	wr.num_sge = 2;
-	wr.send_flags = IB_SEND_SIGNALED;
-	wr.wr.ud.ah = ctx->ah[target_node];
-	wr.wr.ud.remote_qpn = ctx->ah_attrUD[target_node].qpn;
-	wr.wr.ud.remote_qkey = ctx->ah_attrUD[target_node].qkey;
+	wr = &ud_wr.wr;
+	wr->wr_id = type;
+	wr->opcode = IB_WR_SEND;
+	wr->sg_list = sge;
+	wr->num_sge = 2;
+	wr->send_flags = IB_SEND_SIGNALED;
+
+	ud_wr.ah = ctx->ah[target_node];
+	ud_wr.remote_qpn = ctx->ah_attrUD[target_node].qpn;
+	ud_wr.remote_qkey = ctx->ah_attrUD[target_node].qkey;
 	//printk(KERN_CRIT "%s: ah %p qpn %d qkey %d\n", __func__, wr.wr.ud.ah, wr.wr.ud.remote_qpn, wr.wr.ud.remote_qkey);
 
 	client_setup_liteapi_header(ctx->node_id, store_addr, store_semaphore, size, priority, type, &output_header);
@@ -3886,7 +3889,7 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	sge[1].addr = (uintptr_t)addr;
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
-	ret = ib_post_send(ctx->qpUD, &wr, &bad_wr);
+	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
 	if(ret==0){
 		do{
 			ne = ib_poll_cq(ctx->send_cqUD, 1, wc);
@@ -3964,7 +3967,8 @@ int client_send_cq_poller(ltc *ctx)
  */
 int client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int offset, int userspace_flag, int *poll_addr)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	//struct lmr_info *ret;
 	int ret;
@@ -3976,20 +3980,21 @@ int client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lm
         //#endif
 
 	retry_send_request:
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
-	wr.wr_id = (uint64_t)&poll_status;
+	wr = &rdma_wr.wr;
+	wr->wr_id = (uint64_t)&poll_status;
         if(poll_addr)
-                wr.wr_id = (uint64_t)poll_addr;
-	wr.opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
+                wr->wr_id = (uint64_t)poll_addr;
+	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 	//wr.send_flags = 0;
 
-	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr->addr+offset);
-	wr.wr.rdma.rkey = input_mr->rkey;
+	rdma_wr.remote_addr = (uintptr_t) (input_mr->addr+offset);
+	rdma_wr.rkey = input_mr->rkey;
 	if(userspace_flag)
 	{
 		sge.addr = (uintptr_t)addr;
@@ -4003,7 +4008,7 @@ int client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lm
 	sge.lkey = ctx->proc->lkey;
 
 	//test2 ends
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	//test3 starts (ends in client_internal_poll_sendcq) takes 4973ns for 4K read, and takes 1989ns for 8B read
 	if(!ret)
 	{
@@ -4610,7 +4615,8 @@ int client_send_message_with_rdma_emulated_for_local(ltc *ctx, int port, void *a
  */
 int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connection_id, uint32_t input_mr_rkey, uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode, struct imm_message_metadata *header, int userspace_flag, int sge_length, struct atomic_struct *input_atomic, int force_poll_flag)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge[32];
 	//struct lmr_info *ret;
 	int ret;
@@ -4625,15 +4631,16 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
 	
 	retry_send_imm_request:
 
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 	
-	wr.sg_list = sge;
+	wr = &rdma_wr.wr;
+	wr->sg_list = sge;
 	
-	//wr.wr_id = connection_id;
+	//wr->wr_id = connection_id;
 
-	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr_addr+offset);
-	wr.wr.rdma.rkey = input_mr_rkey;
+	rdma_wr.remote_addr = (uintptr_t) (input_mr_addr+offset);
+	rdma_wr.rkey = input_mr_rkey;
         if(sge_length)//sge design process here, only send side could do sge request
         {
                 if(s_mode!= LITE_SEND_MESSAGE_HEADER_AND_IMM)
@@ -4644,22 +4651,22 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                 read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
                 if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
                 {
-                        wr.wr_id = (uint64_t)&poll_status;
-                        wr.send_flags = IB_SEND_SIGNALED;
+                        wr->wr_id = (uint64_t)&poll_status;
+                        wr->send_flags = IB_SEND_SIGNALED;
                         flag = 1;
                 }
                 else
                 {
-                        wr.wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
-                        wr.send_flags = 0;
+                        wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
+                        wr->send_flags = 0;
                 }
 		
-		wr.num_sge = 1 + sge_length;
-		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+		wr->num_sge = 1 + sge_length;
+		wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 		
 		temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
 
-		wr.ex.imm_data = imm;
+		wr->ex.imm_data = imm;
 		
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
@@ -4690,22 +4697,22 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                         read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
                         if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
                         {
-                                wr.wr_id = (uint64_t)&poll_status;
-                                wr.send_flags = IB_SEND_SIGNALED;
+                                wr->wr_id = (uint64_t)&poll_status;
+                                wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
                         }
                         else
                         {
-                                wr.wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
-                                wr.send_flags = 0;
+                                wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
+                                wr->send_flags = 0;
                         }
                         
-                        wr.num_sge = 2;
-                        wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+                        wr->num_sge = 2;
+                        wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
                         
                         temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
 
-                        wr.ex.imm_data = imm;
+                        wr->ex.imm_data = imm;
                         
                         sge[0].addr = temp_header_addr;
                         sge[0].length = sizeof(struct imm_message_metadata);
@@ -4728,20 +4735,20 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                         //if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
 			if(1)
                         {
-                                wr.wr_id = (uint64_t)&poll_status;
-                                wr.send_flags = IB_SEND_SIGNALED;
+                                wr->wr_id = (uint64_t)&poll_status;
+                                wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
                         }
                         else
                         {
-                                wr.wr_id = 0;
-                                wr.send_flags = 0;
+                                wr->wr_id = 0;
+                                wr->send_flags = 0;
                         }
                         
-                        wr.num_sge = 1;
-                        wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+                        wr->num_sge = 1;
+                        wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
-                        wr.ex.imm_data = imm;
+                        wr->ex.imm_data = imm;
                         if(userspace_flag == LITE_KERNELSPACE_FLAG)
                         {
                                 temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
@@ -4762,7 +4769,7 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
         }
 	//test5 ends
 	//test12 ends
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	
 	if(!ret)
 	{
@@ -4790,7 +4797,8 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
  */
 int client_rdma_write_with_imm(ltc *ctx, int connection_id, struct lmr_info *input_mr, void *addr, int size, int offset, uint32_t imm)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	//struct lmr_info *ret;
 	int ret;
@@ -4800,29 +4808,30 @@ int client_rdma_write_with_imm(ltc *ctx, int connection_id, struct lmr_info *inp
 
 	spin_lock(&connection_lock[connection_id]);
 
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
-	wr.wr_id = connection_id;
-	wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
+	wr = &rdma_wr.wr;
+	wr->wr_id = connection_id;
+	wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr->addr+offset);
-	wr.wr.rdma.rkey = input_mr->rkey;
+	rdma_wr.remote_addr = (uintptr_t) (input_mr->addr+offset);
+	rdma_wr.rkey = input_mr->rkey;
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, size);
 	//sge.addr = (uint64_t)ret->addr;
 	//sge.length = ret->length;
 	//sge.lkey = ret->lkey;
 	
-	wr.ex.imm_data = imm;
+	wr->ex.imm_data = imm;
 
 	sge.addr = tempaddr;
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
 
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(ret==0){
 		do{
 			ne = ib_poll_cq(ctx->send_cq[connection_id], 1, wc);
@@ -4952,29 +4961,31 @@ int client_rdma_write_offset_multiplesge(ltc *ctx, uint64_t lite_handler, void *
 
 int client_send_request_without_polling(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int offset, int wr_id)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	int ret;
 	uintptr_t tempaddr;
 	//ktime_t self_time;
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
-	wr.wr_id = wr_id;
-	wr.opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
+	wr = &rdma_wr.wr;
+	wr->wr_id = wr_id;
+	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr->addr+offset);
-	wr.wr.rdma.rkey = input_mr->rkey;
+	rdma_wr.remote_addr = (uintptr_t) (input_mr->addr+offset);
+	rdma_wr.rkey = input_mr->rkey;
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, size);
 	sge.addr = tempaddr;
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
 	
 	//self_time = ktime_get();
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	//get_time_difference(size, self_time);
 	if(ret)
 		printk("Error in [%s] ret:%d \n", __func__, ret);
@@ -5018,7 +5029,8 @@ EXPORT_SYMBOL(client_send_request_polling_only);
  */
 int client_fetch_and_add(ltc *ctx, int connection_id, struct lmr_info *input_mr, void *addr, unsigned long long input_value)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_atomic_wr atomic_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	//struct lmr_info *ret;
 	int ret;
@@ -5028,18 +5040,19 @@ int client_fetch_and_add(ltc *ctx, int connection_id, struct lmr_info *input_mr,
 	//spin_lock(&connection_lock[connection_id]);
 	retry_fetch_and_add:
 
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&atomic_wr, 0, sizeof(atomic_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
-	wr.wr_id = (uint64_t)&poll_status;
-	wr.opcode = IB_WR_ATOMIC_FETCH_AND_ADD;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
+	wr = &atomic_wr.wr;
+	wr->wr_id = (uint64_t)&poll_status;
+	wr->opcode = IB_WR_ATOMIC_FETCH_AND_ADD;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.atomic.remote_addr = (uintptr_t)input_mr->addr;
-	wr.wr.atomic.rkey = input_mr->rkey;
-	wr.wr.atomic.compare_add = input_value;
+	atomic_wr.remote_addr = (uintptr_t)input_mr->addr;
+	atomic_wr.rkey = input_mr->rkey;
+	atomic_wr.compare_add = input_value;
 	
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, sizeof(uint64_t));
 	
@@ -5047,7 +5060,7 @@ int client_fetch_and_add(ltc *ctx, int connection_id, struct lmr_info *input_mr,
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(!ret)
 	{
 		client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
@@ -5072,7 +5085,8 @@ EXPORT_SYMBOL(client_fetch_and_add);
  */
 int client_fetch_and_add_loopback(ltc *ctx, struct lmr_info *input_mr, void *addr, unsigned long long input_value)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_atomic_wr atomic_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	//struct lmr_info *ret;
 	int ret;
@@ -5082,17 +5096,18 @@ int client_fetch_and_add_loopback(ltc *ctx, struct lmr_info *input_mr, void *add
 
 	spin_lock(&ctx->loopback_lock);
 
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&atomic_wr, 0, sizeof(atomic_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
-	wr.opcode = IB_WR_ATOMIC_FETCH_AND_ADD;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
+	wr = &atomic_wr.wr;
+	wr->opcode = IB_WR_ATOMIC_FETCH_AND_ADD;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.atomic.remote_addr = (uintptr_t)input_mr->addr;
-	wr.wr.atomic.rkey = input_mr->rkey;
-	wr.wr.atomic.compare_add = input_value;
+	atomic_wr.remote_addr = (uintptr_t)input_mr->addr;
+	atomic_wr.rkey = input_mr->rkey;
+	atomic_wr.compare_add = input_value;
 	
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, sizeof(uint64_t));
 	
@@ -5100,7 +5115,7 @@ int client_fetch_and_add_loopback(ltc *ctx, struct lmr_info *input_mr, void *add
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
-	ret = ib_post_send(ctx->loopback_out, &wr, &bad_wr);
+	ret = ib_post_send(ctx->loopback_out, wr, &bad_wr);
 	if(ret==0){
 		do{
 			ne = ib_poll_cq(ctx->loopback_cq, 1, wc);
@@ -5133,7 +5148,8 @@ EXPORT_SYMBOL(client_fetch_and_add_loopback);
 
 int client_send_request_multiplesge(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int sge_num, struct ib_sge *input_sge)
 {
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	//struct lmr_info *ret;
 	int ret;
 	int ne, i;
@@ -5141,18 +5157,19 @@ int client_send_request_multiplesge(ltc *ctx, int connection_id, enum mode s_mod
 
 	spin_lock(&connection_lock[connection_id]);
 
-	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
 
-	wr.wr_id = connection_id;
-	wr.opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
-	wr.sg_list = input_sge;
-	wr.num_sge = sge_num;
-	wr.send_flags = IB_SEND_SIGNALED;
+	wr = &rdma_wr.wr;
+	wr->wr_id = connection_id;
+	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	wr->sg_list = input_sge;
+	wr->num_sge = sge_num;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.rdma.remote_addr = (uintptr_t) input_mr->addr;
-	wr.wr.rdma.rkey = input_mr->rkey;
+	rdma_wr.remote_addr = (uintptr_t) input_mr->addr;
+	rdma_wr.rkey = input_mr->rkey;
 
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(ret==0){
 		do{
 			ne = ib_poll_cq(ctx->send_cq[connection_id], 1, wc);
@@ -5194,7 +5211,8 @@ EXPORT_SYMBOL(client_send_request_multiplesge);
 int client_compare_swp(ltc *ctx, int connection_id, struct lmr_info *remote_mr, void *addr, uint64_t guess_value, uint64_t swp_value)
 {
 	//test_printk(KERN_CRIT "answer: %llu guess: %llu swp: %llu\n", *(uint64_t *)addr, guess_value, swp_value);
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_atomic_wr atomic_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	uintptr_t tempaddr;
 	int ret;
@@ -5205,19 +5223,20 @@ int client_compare_swp(ltc *ctx, int connection_id, struct lmr_info *remote_mr, 
 
 	retry_compare_swp:
 
-	memset(&wr, 0, sizeof(wr));
+	memset(&atomic_wr, 0, sizeof(atomic_wr));
 	memset(&sge, 0, sizeof(sge));
 
-	wr.wr_id = (uint64_t)&poll_status;
-	wr.opcode = IB_WR_ATOMIC_CMP_AND_SWP;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
-	wr.wr.atomic.remote_addr = (uintptr_t)remote_mr->addr;
-	wr.wr.atomic.rkey = remote_mr->rkey;
+	wr = &atomic_wr.wr;
+	wr->wr_id = (uint64_t)&poll_status;
+	wr->opcode = IB_WR_ATOMIC_CMP_AND_SWP;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.atomic.compare_add = guess_value;
-	wr.wr.atomic.swap = swp_value;
+	atomic_wr.remote_addr = (uintptr_t)remote_mr->addr;
+	atomic_wr.rkey = remote_mr->rkey;
+	atomic_wr.compare_add = guess_value;
+	atomic_wr.swap = swp_value;
 
 	//ret_mr = client_register_memory_api(connection_id, addr, sizeof(uint64_t), IBV_ACCESS_LOCAL_WRITE);
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, sizeof(uint64_t));
@@ -5226,7 +5245,7 @@ int client_compare_swp(ltc *ctx, int connection_id, struct lmr_info *remote_mr, 
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(!ret)
 	{
 		client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
@@ -5258,7 +5277,8 @@ EXPORT_SYMBOL(client_compare_swp);
 int client_compare_swp_loopback(ltc *ctx, struct lmr_info *remote_mr, void *addr, uint64_t guess_value, uint64_t swp_value)
 {
 	//test_printk(KERN_CRIT "answer: %llu guess: %llu swp: %llu\n", *(uint64_t *)addr, guess_value, swp_value);
-	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_atomic_wr atomic_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
 	uintptr_t tempaddr;
 	int ret;
@@ -5266,19 +5286,20 @@ int client_compare_swp_loopback(ltc *ctx, struct lmr_info *remote_mr, void *addr
 	struct ib_wc wc[2];
 	spin_lock(&ctx->loopback_lock);
 
-	memset(&wr, 0, sizeof(wr));
+	memset(&atomic_wr, 0, sizeof(atomic_wr));
 	memset(&sge, 0, sizeof(sge));
 
-	wr.wr_id = 1;
-	wr.opcode = IB_WR_ATOMIC_CMP_AND_SWP;
-	wr.sg_list = &sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
-	wr.wr.atomic.remote_addr = (uintptr_t)remote_mr->addr;
-	wr.wr.atomic.rkey = remote_mr->rkey;
+	wr = &atomic_wr.wr;
+	wr->wr_id = 1;
+	wr->opcode = IB_WR_ATOMIC_CMP_AND_SWP;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
 
-	wr.wr.atomic.compare_add = guess_value;
-	wr.wr.atomic.swap = swp_value;
+	atomic_wr.remote_addr = (uintptr_t)remote_mr->addr;
+	atomic_wr.rkey = remote_mr->rkey;
+	atomic_wr.compare_add = guess_value;
+	atomic_wr.swap = swp_value;
 
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, sizeof(uint64_t));
 
@@ -5286,7 +5307,7 @@ int client_compare_swp_loopback(ltc *ctx, struct lmr_info *remote_mr, void *addr
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
-	ret = ib_post_send(ctx->loopback_out, &wr, &bad_wr);
+	ret = ib_post_send(ctx->loopback_out, wr, &bad_wr);
 
 	if(ret==0){
 		do{
