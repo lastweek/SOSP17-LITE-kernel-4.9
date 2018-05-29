@@ -82,13 +82,16 @@ extern int Internal_Stat_Count;
 static void ibv_add_one(struct ib_device *device)
 {
 	LITE_ctx = (ltc *)kmalloc(sizeof(ltc), GFP_KERNEL);
+
+	pr_info("%s(): liteapi_dev=%p(%s) device=%p(%s)\n",
+		__func__, liteapi_dev, liteapi_dev ? liteapi_dev->name : " ", device, device->name);
+
 	liteapi_dev = device;
 	
 	ctx_pd = ib_alloc_pd(device);
 	if (!ctx_pd) {
 		printk(KERN_ALERT "Couldn't allocate PD\n");
 	}
-
 	return;
 }
 
@@ -2268,11 +2271,19 @@ static int __init ibv_init_module(void)
 		pr_err("couldn't register class ibv\n");
 		return ret;
 	}
+
 	ret = ib_register_client(&ibv_client);
 	if (ret) {
 		pr_err("couldn't register IB client\n");
 		class_unregister(&ibv_class);
 		return ret;
+	}
+
+	if (!liteapi_dev) {
+		pr_err("%s(): no ib device found, no callback!\n", __func__);
+		ib_unregister_client(&ibv_client);
+		class_unregister(&ibv_class);
+		return -ENODEV;
 	}
 
 	atomic_set(&global_reqid, 0);

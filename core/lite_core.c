@@ -5800,7 +5800,9 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	//lock related
 	lock_queue_element_buffer_cache = kmem_cache_create("lock_queue_element_cache", sizeof(struct lite_lock_queue_element), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	
+	pr_crit("%s:%d before client_init_interface\n", __func__, __LINE__);
 	ctx = client_init_interface(ib_port, ib_dev);
+	pr_crit("%s:%d after client_init_interface\n", __func__, __LINE__);
 	
 	if(!ctx)
 	{
