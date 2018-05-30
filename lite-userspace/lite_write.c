@@ -36,7 +36,7 @@ int init_log(int remote_node)
 	int password=100;
 
 	test_key = userspace_liteapi_alloc_remote_mem(remote_node, 1024*1024*4, 0, password);
-        printf("finish allocation get key %d\n", test_key);
+        printf("finish allocation get key %lu\n", test_key);
 	for(j=0;j<12;j++)
 	{
 		for(i=0;i<n;i++)
@@ -56,5 +56,5 @@ int main(int argc, char *argv[])
         {
         	init_log(atoi(argv[1]));
         }
-	return ;
+	return 0;
 }

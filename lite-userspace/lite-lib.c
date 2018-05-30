@@ -1,4 +1,7 @@
 #include "lite-lib.h"
+#include <sys/syscall.h>
+#include <linux/unistd.h>
+#include <asm/unistd.h>
 
 inline int userspace_liteapi_dist_barrier(unsigned int num)
 {
@@ -163,17 +166,19 @@ inline int userspace_liteapi_query_port(int target_node, int designed_port)
 	return syscall(__NR_lite_query_port, target_node, designed_port, 0);
 }
 
+#if 0
 inline int userspace_liteapi_wrap_alloc(void *data, int size, uint64_t identifier, int password)
 {
         return syscall(__NR_lite_wrap_alloc, data, size, identifier, password);
 }
+#endif
 
 inline int userspace_liteapi_ask_lmr(int memory_node, uint64_t identifier, uint64_t permission, int password)
 {
         return syscall(__NR_lite_ask_lmr, memory_node, identifier, permission, password);
 }
 
-inline int userspace_liteapi_get_node_id(void)
+int userspace_liteapi_get_node_id(void)
 {
         return syscall(__NR_lite_get_node_id);
 }
@@ -290,12 +295,14 @@ inline int userspace_liteapi_reply_and_receive_message(void *addr, int size, uin
         return syscall(__NR_lite_reply_and_receive_message, addr, size*IMM_MAX_PORT+port, descriptor, ret_addr, receive_size, receive_descriptor);
 }
 
+#if 0
 inline int userspace_syscall_test(void)
 {        
         return syscall(__NR_lite_umap_testsyscall, 0);
 }
+#endif
 
-inline int userspace_liteapi_join(char *input_str, int eth_port, int ib_port)
+int userspace_liteapi_join(char *input_str, int eth_port, int ib_port)
 {
         char ipstr[32];
         memset(ipstr, 0, 32);
@@ -316,4 +323,3 @@ int stick_this_thread_to_core(int core_id)
    pthread_t current_thread = pthread_self();    
    return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 }
-
