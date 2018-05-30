@@ -88,14 +88,14 @@ static void ibv_add_one(struct ib_device *device)
 
 	liteapi_dev = device;
 	
-	ctx_pd = ib_alloc_pd(device);
+	ctx_pd = ib_alloc_pd(device, 0);
 	if (!ctx_pd) {
 		printk(KERN_ALERT "Couldn't allocate PD\n");
 	}
 	return;
 }
 
-static void ibv_remove_one(struct ib_device *device)
+static void ibv_remove_one(struct ib_device *device, void *_unused)
 {
 	return;
 }
@@ -2327,6 +2327,7 @@ static int __init ibv_init_module(void)
         import_lite_hooks.lite_join = liteapi_establish_conn;
 	register_lite_hooks(&import_lite_hooks);
 
+	pr_crit("lite_api.ko installed!\n");
 	return 0;
 }
 

@@ -505,13 +505,27 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		return NULL;
 	}
 	ctx->channel = NULL;
-	ctx->pd = ib_alloc_pd(ib_dev);
-	if(!ctx->pd)
-	{
+
+	ctx->pd = ib_alloc_pd(ib_dev, 0);
+	if(!ctx->pd) {
 		printk(KERN_ALERT "Fail to initialize pd / ctx->pd\n");
 		return NULL;
 	}
-	ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
+
+	//ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
+	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
+	if (!IS_ERR(ctx->proc)) {
+		ctx->proc->device  = ctx->pd->device;
+		ctx->proc->pd      = ctx->pd;
+		ctx->proc->uobject = NULL;
+		ctx->proc->need_inval	= false;
+		//atomic_set(&ctx->proc->usecnt, 0);
+	} else {
+		pr_crit("Fail to get_dma_mr\n");
+		return NULL;
+	}
+
+
 	ctx->send_state = (enum s_state *)kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
 	ctx->recv_state = (enum r_state *)kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
 
@@ -6289,7 +6303,7 @@ static int __init lite_internal_init_module(void)
 		return -1;
 	}
 	printk(KERN_CRIT "%s:%d\n", __func__, lite_dev);
-	printk(KERN_CRIT "insmod lite_internal module\n");
+	printk(KERN_CRIT "lite_internal.ko installed!\n");
 	return 0;
 }
 
