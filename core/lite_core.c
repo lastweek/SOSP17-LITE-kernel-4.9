@@ -354,8 +354,8 @@ int client_setup_loopback_connections(ltc *ctx, int size, int rx_depth, int port
 			.cap = {
 				.max_send_wr = rx_depth + 2,
 				.max_recv_wr = rx_depth,
-				.max_send_sge = 32,
-				.max_recv_sge = 32
+				.max_send_sge = LITE_MAX_RC_SGE,
+				.max_recv_sge = LITE_MAX_RC_SGE
 			},
 			.qp_type = IB_QPT_RC
 		};
@@ -399,8 +399,8 @@ int client_setup_loopback_connections(ltc *ctx, int size, int rx_depth, int port
 			.cap = {
 				.max_send_wr = rx_depth + 2,
 				.max_recv_wr = rx_depth,
-				.max_send_sge = 32,
-				.max_recv_sge = 32
+				.max_send_sge = LITE_MAX_RC_SGE,
+				.max_recv_sge = LITE_MAX_RC_SGE
 			},
 			.qp_type = IB_QPT_RC
 		};
@@ -511,6 +511,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		printk(KERN_ALERT "Fail to initialize pd / ctx->pd\n");
 		return NULL;
 	}
+	pr_crit("%s():%d pd->__internal_mr=%p\n", __func__, __LINE__, ctx->pd->__internal_mr);
 
 	//ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
 	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
@@ -665,8 +666,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	cq_attr_foo.flags = 0;
 
 	ctx->cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr_foo);
-	if(!ctx->cqUD)
-	{
+	if (!ctx->cqUD) {
 		printk(KERN_ALERT "Fail to create cqUD\n");
 		return NULL;
 	}
@@ -676,11 +676,11 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	cq_attr_foo.flags = 0;
 
 	ctx->send_cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr_foo);
-	if(!ctx->send_cqUD)
-	{
+	if (!ctx->send_cqUD) {
 		printk(KERN_ALERT "Fail to create send_cqUD\n");
 		return NULL;
 	}
+
 	{
 		struct ib_qp_attr attr, attr1;
 		struct ib_qp_init_attr init_attr = {
@@ -696,16 +696,21 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		};
 
 		ctx->qpUD = ib_create_qp(ctx->pd, &init_attr);
-		if(!ctx->qpUD)
-		{
-			printk(KERN_ALERT "Fail to create qpUD\n");
+		if (IS_ERR_OR_NULL(ctx->qpUD)) {
+			pr_err("Fail to create qpUP, err: %d\n", PTR_ERR_OR_ZERO(ctx->qpUD));
 			return NULL;
 		}
+
+		pr_info("%s(): ctx->qpUD: %p ctx->qpUD->real_qp: %p ctx->qpUD->device: %p(%s) attr: %p init_attr: %p\n",
+			__func__, ctx->qpUD, ctx->qpUD->real_qp, ctx->qpUD->device,
+			ctx->qpUD->device ? ctx->qpUD->device->name : "NULL",
+			&attr, &init_attr);
+
 		ib_query_qp(ctx->qpUD, &attr, IB_QP_CAP, &init_attr);
-		if(init_attr.cap.max_inline_data >= size)
-		{
+		pr_info("%s():%d after query qpUD\n", __func__, __LINE__);
+
+		if (init_attr.cap.max_inline_data >= size)
 			ctx->send_flags |= IB_SEND_INLINE;
-		}
 
                 attr1.qp_state = IB_QPS_INIT;
                 attr1.pkey_index = 0;
@@ -756,6 +761,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 
 	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+1, 0);
+	pr_info("%s:%d num_connections:%d\n", __func__, __LINE__, num_connections);
 	for(i=0;i<num_connections;i++)
 	{
 		struct ib_qp_attr attr, attr1;
@@ -769,6 +775,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		ctx->send_cq[i] = ctx->send_cq[0];
                 #endif
                 #ifdef NON_SHARE_POLL_CQ_MODEL
+		memset(&cq_attr, 0, sizeof(cq_attr));
 		cq_attr.cqe = rx_depth + 1;
 		cq_attr.comp_vector = 0;
 		cq_attr.flags = 0;
@@ -776,28 +783,31 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
 		//ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, 12000, 0);
                 #endif
-			init_attr.send_cq = ctx->send_cq[i];//ctx->cq
-			//init_attr.recv_cq = ctx->cq;
-			init_attr.recv_cq = ctx->cq[i%NUM_POLLING_THREADS];
-			        init_attr.cap.max_send_wr = rx_depth + 2;
-        			//init_attr.cap.max_send_wr = 12000;
-	        	        init_attr.cap.max_recv_wr = rx_depth;
-        			init_attr.cap.max_send_sge = 32;
-        			init_attr.cap.max_recv_sge = 32;
-			init_attr.qp_type = IB_QPT_RC;
-			init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;
+
+		memset(&init_attr, 0, sizeof(init_attr));
+		init_attr.send_cq = ctx->send_cq[i];//ctx->cq
+		//init_attr.recv_cq = ctx->cq;
+		init_attr.recv_cq = ctx->cq[i%NUM_POLLING_THREADS];
+		init_attr.cap.max_send_wr = rx_depth + 2;
+        	//init_attr.cap.max_send_wr = 12000;
+	        init_attr.cap.max_recv_wr = rx_depth;
+		init_attr.qp_type = IB_QPT_RC;
+		init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;
+
+        	init_attr.cap.max_send_sge = LITE_MAX_RC_SGE;
+        	init_attr.cap.max_recv_sge = LITE_MAX_RC_SGE;
 
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
-		if(!ctx->qp[i])
-		{
-			printk(KERN_ALERT "Fail to create qp[%d]\n", i);
+		if (IS_ERR_OR_NULL(ctx->qp[i])) {
+			pr_err("%s()%d: Fail to create ctx->qp[%d], err: %d\n",
+				__func__, __LINE__, i, PTR_ERR_OR_ZERO(ctx->qp[i]));
 			return NULL;
 		}
+
 		ib_query_qp(ctx->qp[i], &attr, IB_QP_CAP, &init_attr);
-		if(init_attr.cap.max_inline_data >= size)
-		{
+
+		if (init_attr.cap.max_inline_data >= size)
 			ctx->send_flags |= IB_SEND_INLINE;
-		}
 
                 attr1.qp_state = IB_QPS_INIT;
                 attr1.pkey_index = 0;
@@ -897,9 +907,9 @@ ltc *client_init_interface(int ib_port, struct ib_device *ib_dev)
 	x = rdma_port_get_link_layer(ib_dev, ib_port);
 	rcnt = 0;
 	scnt = 0;
+
 	ctx = client_init_ctx(size, rx_depth, ib_port, ib_dev);
-	if(!ctx)
-	{
+	if (!ctx) {
 		printk(KERN_ALERT "Fail to do client_init_ctx\n");
 		return 0;
 	}
@@ -2968,7 +2978,7 @@ int waiting_queue_handler(ltc *ctx)
 int client_asy_latest_job_add(ltc *ctx, int type, uint64_t key, int offset, int size)
 {
 	int tmp=0;
-	int required_page_num;
+	int required_page_num = 0;
 	int bucket = key%(1<<HASH_TABLE_SIZE_BIT);
 
 	//Reserve page numbers based on write requested size
@@ -5817,9 +5827,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	pr_crit("%s:%d before client_init_interface\n", __func__, __LINE__);
 	ctx = client_init_interface(ib_port, ib_dev);
 	pr_crit("%s:%d after client_init_interface\n", __func__, __LINE__);
-	
-	if(!ctx)
-	{
+	if (!ctx) {
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
 		return 0;	
 	}
@@ -5960,7 +5968,9 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 
 	memset(&my_dest, 0, sizeof(struct lite_dest));
 	memset(&rem_dest, 0, sizeof(struct lite_dest));
-	printk(KERN_INFO "establish connection id %d name %s\n", server_id, servername);
+
+	printk(KERN_INFO "%s:%d establish connection server_id %d name %s\n",
+		__func__, __LINE__, server_id, servername);
 
 	port_buf = (char*)kmalloc(sizeof(char)*16, GFP_KERNEL);
 	memset(port_buf, 0, 16);
@@ -5975,21 +5985,21 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = htonl((((((ip_a << 8) | ip_b) << 8) | ip_c) << 8) | ip_d);
-	printk(KERN_ALERT "establish connection to %x to port %d\n",addr.sin_addr.s_addr, port);
+
 	sockfd = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &excsocket);
 	ret = excsocket->ops->connect(excsocket, (struct sockaddr *)&addr, sizeof(addr), 0);
-	if(sockfd < 0)
-	{
+	if(sockfd < 0) {
 		printk(KERN_ALERT "fail to connect to %d\n", ret);
 		return 0;
 	}
+
 	client_ktcp_recv(excsocket,(char *)&NODE_ID, sizeof(int));
 	printk(KERN_ALERT "Receive %d\n", NODE_ID);
-	if(NODE_ID<=0)
-	{
+	if (NODE_ID<=0) {
 		printk(KERN_ALERT "fail to get NODE_ID as %d\n", NODE_ID);
 		return 0;
 	}
+
 	ctx->node_id = NODE_ID;
 	client_ktcp_recv(excsocket, (char *)&ask_number_of_MR_set, sizeof(int));	
 	printk(KERN_ALERT "Receive %d\n", ask_number_of_MR_set);

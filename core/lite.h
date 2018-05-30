@@ -118,6 +118,13 @@
 #define MAX_LITE_NUM 4
 #define MESSAGE_SIZE 4096
 
+/*
+ * This define the maximum send/recv SGE a QP can support.
+ * This must be lower than the maximum your IB card can support.
+ * Otherwise you will fail to create qp.
+ */
+#define LITE_MAX_RC_SGE	16
+
 #define LITE_USERSPACE_FLAG 1
 #define LITE_KERNELSPACE_FLAG 0
 #define LITE_LINUX_PAGE_OFFSET 0x00000fff
