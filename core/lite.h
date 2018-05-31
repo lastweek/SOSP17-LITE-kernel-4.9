@@ -127,6 +127,7 @@
  * Otherwise you will fail to create qp.
  */
 #define LITE_MAX_RC_SGE	16
+#define LITE_MAX_UD_SGE	16
 
 #define LITE_USERSPACE_FLAG 1
 #define LITE_KERNELSPACE_FLAG 0

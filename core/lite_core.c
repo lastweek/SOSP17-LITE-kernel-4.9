@@ -693,8 +693,8 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 			.cap = {
 				.max_send_wr = rx_depth*4 + 2,
 				.max_recv_wr = rx_depth*4,
-				.max_send_sge = 32,
-				.max_recv_sge = 32
+				.max_send_sge = LITE_MAX_UD_SGE,
+				.max_recv_sge = LITE_MAX_UD_SGE,
 			},
 			.qp_type = IB_QPT_UD
 		};
@@ -999,7 +999,14 @@ inline uintptr_t client_ib_reg_mr_addr(ltc *ctx, void *addr, size_t length)
 #ifdef PHYSICAL_ALLOCATION
 	return client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
 #else
-	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
+	u64 ret;
+
+	ret = ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
+
+	pr_info("%s(): (%s) addr: %p len:%zu ret_addr: %#llx\n",
+		__func__, ((struct ib_device *)ctx->context)->name,
+		addr, length, ret);
+	return ret;
 #endif
 }
 EXPORT_SYMBOL(client_ib_reg_mr_addr);
