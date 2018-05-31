@@ -1668,6 +1668,7 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 				printk("%s: error in request_size %d handling\n", __func__, request_size);
 				break;
 			}
+
 			tempaddr = client_ib_reg_mr_addr(ctx, &request_size, sizeof(int));
 			if(atomic_flag)
 			{
@@ -1675,9 +1676,7 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
 				if (ret)
 					return -EFAULT;
-			}
-			else
-			{
+			} else {
 				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
 				if (ret)
 					return -EFAULT;

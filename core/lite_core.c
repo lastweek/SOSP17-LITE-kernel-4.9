@@ -511,16 +511,19 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		printk(KERN_ALERT "Fail to initialize pd / ctx->pd\n");
 		return NULL;
 	}
+
 	pr_crit("%s():%d pd->__internal_mr=%p\n", __func__, __LINE__, ctx->pd->__internal_mr);
 
 	//ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
+
 	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
 	if (!IS_ERR(ctx->proc)) {
 		ctx->proc->device  = ctx->pd->device;
 		ctx->proc->pd      = ctx->pd;
 		ctx->proc->uobject = NULL;
 		ctx->proc->need_inval	= false;
-		//atomic_set(&ctx->proc->usecnt, 0);
+
+		pr_crit("%s():%d ctx->proc->lkey=%#x\n", __func__, __LINE__, ctx->proc->lkey);
 	} else {
 		pr_crit("Fail to get_dma_mr\n");
 		return NULL;
@@ -3874,6 +3877,7 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 
 	client_setup_liteapi_header(ctx->node_id, store_addr, store_semaphore, size, priority, type, &output_header);
 	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, &output_header, sizeof(struct liteapi_header));
+
 	sge[0].addr = (uintptr_t)output_header_addr;
 	sge[0].length = sizeof(struct liteapi_header);
 	sge[0].lkey = ctx->proc->lkey;
