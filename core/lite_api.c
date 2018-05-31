@@ -1660,6 +1660,8 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 	{
 		for(i=0;i<required_mr_num && remaining_size >0;i++)
 		{
+			unsigned long start_jiffies;
+
 			ret_mr = client_alloc_lmr_info_buf();
 			wait_send_reply_id = SEND_REPLY_WAIT;
 			request_size = MIN(remaining_size, LITE_MEMORY_BLOCK);
@@ -1682,8 +1684,14 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 					return -EFAULT;
 			}
 
-			while(wait_send_reply_id==SEND_REPLY_WAIT)
+			start_jiffies = jiffies;
+			while(wait_send_reply_id==SEND_REPLY_WAIT) {
+				if (time_after(jiffies, start_jiffies + 10 * HZ)) {
+					lite_err("FK get a timeout! target_node: %d", target_node);
+					return -EFAULT;
+				}
 				cpu_relax();
+			}
 
 			ret_mr_list[i] = ret_mr;
 			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 

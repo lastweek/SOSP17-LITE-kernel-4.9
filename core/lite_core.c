@@ -3904,7 +3904,7 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 			}
 		}
 	} else
-		printk(KERN_INFO "send fail at UD\n");
+		lite_err("post_send fail at UD ret=%d", ret);
 	spin_unlock(&ctx->connection_lockUD);
 	return ret;
 }
