@@ -992,12 +992,11 @@ int client_msg_to_lite_dest(char *msg, struct lite_dest *rem_dest)
 
 inline uintptr_t client_ib_reg_mr_addr(ltc *ctx, void *addr, size_t length)
 {
-	#ifdef PHYSICAL_ALLOCATION
+#ifdef PHYSICAL_ALLOCATION
 	return client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-	#endif
-	#ifndef PHYSICAL_ALLOCATION
+#else
 	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
-	#endif
+#endif
 }
 EXPORT_SYMBOL(client_ib_reg_mr_addr);
 
@@ -1031,12 +1030,11 @@ struct lmr_info *client_ib_reg_mr(ltc *ctx, void *addr, size_t length, enum ib_a
 	ret = client_alloc_lmr_info_buf();
 	//int connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
 	
-	#ifdef PHYSICAL_ALLOCATION
+#ifdef PHYSICAL_ALLOCATION
 	ret->addr = (void *)client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-	#endif
-	#ifndef PHYSICAL_ALLOCATION
+#else
 	ret->addr = (void *)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
-	#endif
+#endif
 	
 	ret->length = length;
 	ret->lkey = proc->lkey;
@@ -1049,12 +1047,6 @@ EXPORT_SYMBOL(client_ib_reg_mr);
 
 void header_cache_free(void *ptr)
 {
-	kmem_cache_free(header_cache_UD, ptr);
-}
-
-void header_cache_UD_free(void *ptr)
-{
-	//printk(KERN_CRIT "free %x\n", ptr);
 	kmem_cache_free(header_cache_UD, ptr);
 }
 
@@ -3505,7 +3497,14 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 				int type;
 				struct liteapi_post_receive_intermediate_struct *p_r_i_struct = (struct liteapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct liteapi_header *header_addr, temp_header;
+				void *free_ptr;
 
+				/*
+				 * The buffer was allocated by client_post_receives_message_UD()
+				 * The size is:  [sizeof(struct liteapi_header + 40)]
+				 * I don't know why it make a copy first and then free original buffer. But anyway.
+				 */
+				free_ptr = (void *)p_r_i_struct->header;
 				memcpy(&temp_header, (void *)p_r_i_struct->header + 40, sizeof(struct liteapi_header));
 				header_addr = &temp_header;
 
@@ -3527,7 +3526,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					spin_lock(&wq_lock[QUEUE_LOW]);
 					list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
 					spin_unlock(&wq_lock[QUEUE_LOW]);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 				case MSG_GET_SEND_AND_REPLY_1:
@@ -3547,7 +3546,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
 					spin_unlock(&wq_lock[QUEUE_LOW]);
 					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}	
 				case MSG_RESERVE_LOCK:
@@ -3571,7 +3570,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					list_add_tail(&(recv->list), &request_list[QUEUE_HIGH].list);
 					spin_unlock(&wq_lock[QUEUE_HIGH]);
 					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 				case MSG_MR_REQUEST:
@@ -3591,7 +3590,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					list_add_tail(&(recv->list), &request_list[QUEUE_MEDIUM].list);
 					spin_unlock(&wq_lock[QUEUE_MEDIUM]);
 					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 				case MSG_GET_REMOTE_ATOMIC_OPERATION:
@@ -3615,7 +3614,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
 					spin_unlock(&wq_lock[QUEUE_LOW]);
 					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 				case MSG_NODE_JOIN:
@@ -3635,7 +3634,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 						wake_up_process(thread_create_new_node);
 					}
 					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 
@@ -3670,7 +3669,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 						ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
 
 					client_free_recv_buf(addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 
@@ -3688,7 +3687,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					memcpy((void *)header_addr->store_addr, addr, header_addr->length);
 					memcpy((void *)header_addr->store_semaphore, &header_addr->length, sizeof(uint32_t));
 					client_free_recv_buf(addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 				case MSG_CREATE_LOCK_REPLY:
@@ -3707,7 +3706,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 						memcpy((void *)header_addr->store_semaphore, &ret, sizeof(int));
 					}
 					client_free_recv_buf(addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 
@@ -3717,7 +3716,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					*(void **)header_addr->store_addr = addr;
 					*(int *)header_addr->store_semaphore = header_addr->length;
 					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
+					header_cache_free(free_ptr);
 					break;
 				}
 
