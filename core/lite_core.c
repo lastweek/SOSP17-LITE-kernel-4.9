@@ -3887,6 +3887,9 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
 
+	pr_info("%s(): addr: %#llx len:%#x lkey %#x \n", __func__, sge[0].addr, sge[0].length, sge[0].lkey);
+	pr_info("%s(): addr: %#llx len:%#x lkey %#x \n", __func__, sge[1].addr, sge[1].length, sge[1].lkey);
+
 	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
 	if (ret == 0) {
 		do {
@@ -3899,7 +3902,8 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 
 		for(i=0;i<ne;i++) {
 			if (wc[i].status != IB_WC_SUCCESS) {
-				lite_err("Send failed at UD as %d", wc[i].status);
+				lite_err("Send failed at UD as %d (%s)",
+					wc[i].status, ib_wc_status_msg(wc[i].status));
 				return 2;
 			}
 		}
