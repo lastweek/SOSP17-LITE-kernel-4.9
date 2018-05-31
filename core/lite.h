@@ -104,6 +104,9 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
+#define lite_err(fmt, ...)	\
+	pr_info("%s():%d "fmt"\n", __func__, __LINE__, __VA_ARGS__)
+
 
 #define DEBUG_SHINYEH
 

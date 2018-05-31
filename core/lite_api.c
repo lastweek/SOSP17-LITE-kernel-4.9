@@ -1608,6 +1608,7 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
         int total_node = liteapi_get_total_node();
         int round_robin_node;
         int *round_robin_list;
+	int ret;
 
 	if(atomic_flag ==1 && size != sizeof(uint64_t))
 	{
@@ -1671,14 +1672,20 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			if(atomic_flag)
 			{
 				remaining_size=sizeof(uint64_t);
-				client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
+				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
+				if (ret)
+					return -EFAULT;
 			}
 			else
 			{
-				client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
+				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
+				if (ret)
+					return -EFAULT;
 			}
+
 			while(wait_send_reply_id==SEND_REPLY_WAIT)
 				cpu_relax();
+
 			ret_mr_list[i] = ret_mr;
 			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 
 		}

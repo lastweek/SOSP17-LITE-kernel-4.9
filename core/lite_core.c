@@ -3871,7 +3871,6 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	ud_wr.ah = ctx->ah[target_node];
 	ud_wr.remote_qpn = ctx->ah_attrUD[target_node].qpn;
 	ud_wr.remote_qkey = ctx->ah_attrUD[target_node].qkey;
-	//printk(KERN_CRIT "%s: ah %p qpn %d qkey %d\n", __func__, wr.wr.ud.ah, wr.wr.ud.remote_qpn, wr.wr.ud.remote_qkey);
 
 	client_setup_liteapi_header(ctx->node_id, store_addr, store_semaphore, size, priority, type, &output_header);
 	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, &output_header, sizeof(struct liteapi_header));
@@ -3882,28 +3881,25 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	sge[1].addr = (uintptr_t)addr;
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
+
 	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
-	if(ret==0){
-		do{
+	if (ret == 0) {
+		do {
 			ne = ib_poll_cq(ctx->send_cqUD, 1, wc);
-			if(ne < 0)
-			{
+			if (ne < 0) {
 				printk(KERN_ALERT "poll send_cq failed at UD\n");
 				return 1;
 			}
-		}while(ne<1);
-		for(i=0;i<ne;i++)
-		{
-			if(wc[i].status!=IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "send failed at UD as %d\n", wc[i].status);
+		} while(ne<1);
+
+		for(i=0;i<ne;i++) {
+			if (wc[i].status != IB_WC_SUCCESS) {
+				lite_err("Send failed at UD as %d", wc[i].status);
 				return 2;
 			}
 		}
-	}
-	else{
+	} else
 		printk(KERN_INFO "send fail at UD\n");
-	}
 	spin_unlock(&ctx->connection_lockUD);
 	return ret;
 }
