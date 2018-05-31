@@ -28,7 +28,7 @@ struct task_struct *asyIO_handler;
 
 struct kmem_cache *post_receive_cache;
 struct kmem_cache *s_r_cache;
-struct kmem_cache *header_cache;
+//struct kmem_cache *header_cache;
 struct kmem_cache *header_cache_UD;
 struct kmem_cache *intermediate_cache;
 struct kmem_cache *lmr_info_cache;
@@ -5731,7 +5731,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	//Build cache for memory --> slab
 	post_receive_cache = kmem_cache_create("post_receive_buffer", POST_RECEIVE_CACHE_SIZE, 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	s_r_cache = kmem_cache_create("send_reply_cache", sizeof(struct send_and_reply_format), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
-	header_cache = kmem_cache_create("header_cache", sizeof(struct liteapi_header), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD | SLAB_HWCACHE_ALIGN), NULL);
+	//header_cache = kmem_cache_create("header_cache", sizeof(struct liteapi_header), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD | SLAB_HWCACHE_ALIGN), NULL);
 	header_cache_UD = kmem_cache_create("header_cacheUD", sizeof(struct liteapi_header)+40, 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD | SLAB_HWCACHE_ALIGN), NULL);
 	intermediate_cache = kmem_cache_create("intermediate_cache", sizeof(struct liteapi_post_receive_intermediate_struct), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 	lmr_info_cache = kmem_cache_create("lmr_info_cache", sizeof(struct lmr_info), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -6092,8 +6092,8 @@ int client_cleanup_module(void)
 	}*/
 	if(post_receive_cache)
 		kmem_cache_destroy(post_receive_cache);
-	if(header_cache)
-		kmem_cache_destroy(header_cache);
+	//if(header_cache)
+	//	kmem_cache_destroy(header_cache);
 	if(header_cache_UD)
 		kmem_cache_destroy(header_cache_UD);
 	if(s_r_cache)
