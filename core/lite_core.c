@@ -1049,7 +1049,7 @@ EXPORT_SYMBOL(client_ib_reg_mr);
 
 void header_cache_free(void *ptr)
 {
-	kmem_cache_free(header_cache, ptr);
+	kmem_cache_free(header_cache_UD, ptr);
 }
 
 void header_cache_UD_free(void *ptr)
