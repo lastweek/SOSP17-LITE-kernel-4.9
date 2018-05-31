@@ -1049,7 +1049,6 @@ EXPORT_SYMBOL(client_ib_reg_mr);
 
 void header_cache_free(void *ptr)
 {
-	//printk(KERN_CRIT "free %x\n", ptr);
 	kmem_cache_free(header_cache, ptr);
 }
 
@@ -3439,15 +3438,14 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 	int ne;
 	struct ib_wc wc[NUM_PARALLEL_CONNECTION];
 	int i;
-	#ifdef NOTIFY_MODEL_UD
+#ifdef NOTIFY_MODEL_UD
 	int test_result = 0;
-	#endif
-	allow_signal(SIGKILL);
-	//set_current_state(TASK_INTERRUPTIBLE);
+#endif
 
-	while(1)
-	{
-		#ifdef NOTIFY_MODEL_UD
+	allow_signal(SIGKILL);
+
+	while(1) {
+#ifdef NOTIFY_MODEL_UD
 		ne = ib_poll_cq(target_cq, NUM_PARALLEL_CONNECTION, wc);
 		if(ne < 0)
 		{
@@ -3474,328 +3472,259 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 			printk(KERN_ALERT "Stop cq and return\n");
 			return 0;
 		}
-		#endif
+#endif
 
 
-		#ifdef BUSY_POLL_MODEL_UD
+		/*
+		 * Default model
+		 */
+#ifdef BUSY_POLL_MODEL_UD
 		do{
-			//set_current_state(TASK_RUNNING);
 			ne = ib_poll_cq(target_cq, NUM_PARALLEL_CONNECTION, wc);
-			if(ne < 0)
-			{
-				printk(KERN_ALERT "poll CQ failed %d\n", ne);
+			if (ne < 0) {
+				pr_err("poll CQ failed %d\n", ne);
 				return 1;
 			}
-			if(ne==0)
-			{
+
+			if (ne == 0) {
 				schedule();
-				if(kthread_should_stop())
-				{
+				if (kthread_should_stop()) {
 					printk(KERN_ALERT "Stop cq and return\n");
 					return 0;
 				}
 			}
-		}while(ne < 1);
-		#endif
-		for(i=0;i<ne;++i)
-		{
+		} while(ne < 1);
+#endif
+
+		for (i = 0; i < ne; i++) {
 			if(wc[i].status != IB_WC_SUCCESS)
-			{
 				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
-			}
-			if((int) wc[i].opcode == IB_WC_RECV)
-			{
+
+			if ((int) wc[i].opcode == IB_WC_RECV) {
 				char *addr;
 				int type;
 				struct liteapi_post_receive_intermediate_struct *p_r_i_struct = (struct liteapi_post_receive_intermediate_struct*)wc[i].wr_id;
-				struct liteapi_header *header_addr;
-				struct liteapi_header temp_header;
-				//ktime_t self_time;
-				//self_time = ktime_get();
+				struct liteapi_header *header_addr, temp_header;
 
-				//header_addr = ((struct liteapi_header*)p_r_i_struct->header)+40;
 				memcpy(&temp_header, (void *)p_r_i_struct->header + 40, sizeof(struct liteapi_header));
 				header_addr = &temp_header;
+
 				addr = (char *)p_r_i_struct->msg;
 				ctx->recv_numUD++;
 				type = header_addr->type;
-				//printk(KERN_ALERT "receive %d\n", type);
-				switch(type)
+
+				switch (type) {
+				case MSG_CLIENT_SEND:
+				case MSG_SERVER_SEND:	
 				{
-					case MSG_CLIENT_SEND:
-					case MSG_SERVER_SEND:	
-					{
-						struct send_and_reply_format *recv;
-						recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-						recv->length = header_addr->length;
-						recv->src_id = header_addr->src_id;
-						recv->msg = addr;
-						recv->type = type;
+					struct send_and_reply_format *recv;
+					recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+					recv->length = header_addr->length;
+					recv->src_id = header_addr->src_id;
+					recv->msg = addr;
+					recv->type = type;
 
-						spin_lock(&wq_lock[QUEUE_LOW]);
-						list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
-						spin_unlock(&wq_lock[QUEUE_LOW]);
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
+					spin_lock(&wq_lock[QUEUE_LOW]);
+					list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
+					spin_unlock(&wq_lock[QUEUE_LOW]);
+					header_cache_free(header_addr);
+					break;
+				}
+				case MSG_GET_SEND_AND_REPLY_1:
+				case MSG_GET_SEND_AND_REPLY_OPT_1:
+				{
+					struct send_and_reply_format *recv;
+
+					recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+					recv->src_id = header_addr->src_id;
+					recv->store_addr = header_addr->store_addr;
+					recv->store_semaphore = header_addr->store_semaphore;
+					recv->length = header_addr->length;
+					recv->msg = addr;
+					recv->type = type;
+
+					spin_lock(&wq_lock[QUEUE_LOW]);
+					list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
+					spin_unlock(&wq_lock[QUEUE_LOW]);
+					//kmem_cache_free(header_cache, header_addr);
+					header_cache_free(header_addr);
+					break;
+				}	
+				case MSG_RESERVE_LOCK:
+				case MSG_UNLOCK:
+				case MSG_GET_REMOTEMR:
+				case MSG_ASK_MR_1:
+				case MSG_DIST_BARRIER:
+				{
+					struct send_and_reply_format *recv;
+					recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+
+
+					recv->src_id = header_addr->src_id;
+					recv->store_addr = header_addr->store_addr;
+					recv->store_semaphore = header_addr->store_semaphore;
+					recv->length = header_addr->length;
+					recv->msg = addr;
+					recv->type = type;
+					
+					spin_lock(&wq_lock[QUEUE_HIGH]);
+					list_add_tail(&(recv->list), &request_list[QUEUE_HIGH].list);
+					spin_unlock(&wq_lock[QUEUE_HIGH]);
+					//kmem_cache_free(header_cache, header_addr);
+					header_cache_free(header_addr);
+					break;
+				}
+				case MSG_MR_REQUEST:
+				{
+					struct send_and_reply_format *recv;
+					recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+
+
+					recv->src_id = header_addr->src_id;
+					recv->store_addr = header_addr->store_addr;
+					recv->store_semaphore = header_addr->store_semaphore;
+					recv->length = header_addr->length;
+					recv->msg = addr;
+					recv->type = type;
+
+					spin_lock(&wq_lock[QUEUE_MEDIUM]);
+					list_add_tail(&(recv->list), &request_list[QUEUE_MEDIUM].list);
+					spin_unlock(&wq_lock[QUEUE_MEDIUM]);
+					//kmem_cache_free(header_cache, header_addr);
+					header_cache_free(header_addr);
+					break;
+				}
+				case MSG_GET_REMOTE_ATOMIC_OPERATION:
+				case MSG_QUERY_PORT_1:
+				case MSG_PASS_LOCAL_IMM:
+				case MSG_DO_ACK_REMOTE:
+				case MSG_CREATE_LOCK:
+				case MSG_ASK_LOCK: {
+					struct send_and_reply_format *recv;
+					recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+
+
+					recv->src_id = header_addr->src_id;
+					recv->store_addr = header_addr->store_addr;
+					recv->store_semaphore = header_addr->store_semaphore;
+					recv->length = header_addr->length;
+					recv->msg = addr;
+					recv->type = type;
+
+					spin_lock(&wq_lock[QUEUE_LOW]);
+					list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
+					spin_unlock(&wq_lock[QUEUE_LOW]);
+					//kmem_cache_free(header_cache, header_addr);
+					header_cache_free(header_addr);
+					break;
+				}
+				case MSG_NODE_JOIN:
+				{
+					struct task_struct *thread_create_new_node;
+					struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
+					input->ctx = ctx;
+					input->msg = addr;
+					thread_create_new_node = kthread_create((void *)client_add_newnode_pass, input, "create new node");
+					//printk(KERN_ALERT "%s: Create RC node %s\n", __func__, input->msg);
+					if(IS_ERR(thread_create_new_node))
+					{
+						printk(KERN_ALERT "Fail to create a new thread for new node\n");
 					}
-					case MSG_GET_SEND_AND_REPLY_1:
-					case MSG_GET_SEND_AND_REPLY_OPT_1:
+					else
 					{
-						struct send_and_reply_format *recv;
-
-						recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-						recv->src_id = header_addr->src_id;
-						recv->store_addr = header_addr->store_addr;
-						recv->store_semaphore = header_addr->store_semaphore;
-						recv->length = header_addr->length;
-						recv->msg = addr;
-						recv->type = type;
-
-						spin_lock(&wq_lock[QUEUE_LOW]);
-						list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
-						spin_unlock(&wq_lock[QUEUE_LOW]);
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
-					}	
-					case MSG_RESERVE_LOCK:
-					case MSG_UNLOCK:
-					case MSG_GET_REMOTEMR:
-					case MSG_ASK_MR_1:
-					case MSG_DIST_BARRIER:
-					{
-						struct send_and_reply_format *recv;
-						recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-
-
-						recv->src_id = header_addr->src_id;
-						recv->store_addr = header_addr->store_addr;
-						recv->store_semaphore = header_addr->store_semaphore;
-						recv->length = header_addr->length;
-						recv->msg = addr;
-						recv->type = type;
-						
-						spin_lock(&wq_lock[QUEUE_HIGH]);
-						list_add_tail(&(recv->list), &request_list[QUEUE_HIGH].list);
-						spin_unlock(&wq_lock[QUEUE_HIGH]);
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
+						wake_up_process(thread_create_new_node);
 					}
-					case MSG_MR_REQUEST:
-					{
-						struct send_and_reply_format *recv;
-						recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+					//kmem_cache_free(header_cache, header_addr);
+					header_cache_free(header_addr);
+					break;
+				}
 
+				case MSG_NODE_JOIN_UD: {
+					struct client_ah_combined *input_ah_attr;
+					struct ib_ah_attr ah_attr;
+					int node_id;
 
-						recv->src_id = header_addr->src_id;
-						recv->store_addr = header_addr->store_addr;
-						recv->store_semaphore = header_addr->store_semaphore;
-						recv->length = header_addr->length;
-						recv->msg = addr;
-						recv->type = type;
+					input_ah_attr = (struct client_ah_combined *) addr;
+					node_id = input_ah_attr->node_id;
 
-						spin_lock(&wq_lock[QUEUE_MEDIUM]);
-						list_add_tail(&(recv->list), &request_list[QUEUE_MEDIUM].list);
-						spin_unlock(&wq_lock[QUEUE_MEDIUM]);
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
+					memcpy(&ctx->ah_attrUD[node_id], addr, sizeof(struct client_ah_combined));
+					memset(&ah_attr, 0, sizeof(struct ib_ah_attr));
+
+					ah_attr.dlid      = ctx->ah_attrUD[node_id].dlid;
+					ah_attr.sl        = UD_QP_SL;
+					ah_attr.src_path_bits = 0;
+					ah_attr.port_num = 1;
+
+					if (SGID_INDEX!=-1) {
+						/* RoCE model.. */
+
+						memcpy(&ah_attr.grh.dgid, &ctx->ah_attrUD[node_id].gid, sizeof(union ib_gid));
+						ah_attr.ah_flags = 1;
+						ah_attr.grh.sgid_index = SGID_INDEX;
+						ah_attr.grh.hop_limit = 1;
 					}
-					case MSG_GET_REMOTE_ATOMIC_OPERATION:
-					case MSG_QUERY_PORT_1:
-					case MSG_PASS_LOCAL_IMM:
-					case MSG_DO_ACK_REMOTE:
-					case MSG_CREATE_LOCK:
-					case MSG_ASK_LOCK:
-					{
-						struct send_and_reply_format *recv;
-						recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 
+					ctx->ah[node_id] = ib_create_ah(ctx->pd, &ah_attr);
+					pr_info("%s: create UD dlid %d qpn %d nodeid %d ah %p\n", __func__,
+						ctx->ah_attrUD[node_id].dlid, ctx->ah_attrUD[node_id].qpn,
+						ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
 
-						recv->src_id = header_addr->src_id;
-						recv->store_addr = header_addr->store_addr;
-						recv->store_semaphore = header_addr->store_semaphore;
-						recv->length = header_addr->length;
-						recv->msg = addr;
-						recv->type = type;
+					client_free_recv_buf(addr);
+					header_cache_free(header_addr);
+					break;
+				}
 
-						spin_lock(&wq_lock[QUEUE_LOW]);
-						list_add_tail(&(recv->list), &request_list[QUEUE_LOW].list);
-						spin_unlock(&wq_lock[QUEUE_LOW]);
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
-					}
-					case MSG_NODE_JOIN:
+				case MSG_GET_SEND_AND_REPLY_2:
+				case MSG_GET_ATOMIC_REPLY:
+				case MSG_GET_REMOTEMR_REPLY:
+				case MSG_ASSIGN_LOCK:
+				case MSG_ASK_MR_2:
+				case MSG_QUERY_PORT_2:
+				{
+					if(header_addr->length > 5120)
 					{
-						struct task_struct *thread_create_new_node;
-						struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
-						input->ctx = ctx;
-						input->msg = addr;
-						thread_create_new_node = kthread_create((void *)client_add_newnode_pass, input, "create new node");
-						//printk(KERN_ALERT "%s: Create RC node %s\n", __func__, input->msg);
-						if(IS_ERR(thread_create_new_node))
-						{
-							printk(KERN_ALERT "Fail to create a new thread for new node\n");
-						}
-						else
-						{
-							wake_up_process(thread_create_new_node);
-						}
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
+						printk(KERN_CRIT "IB_BUG: from lid %d receive type %d with len %d addr: %llu semaphore: %llu\n", wc[i].slid, type, header_addr->length, header_addr->store_addr, header_addr->store_semaphore);
 					}
-					case MSG_NODE_JOIN_UD:
+					memcpy((void *)header_addr->store_addr, addr, header_addr->length);
+					memcpy((void *)header_addr->store_semaphore, &header_addr->length, sizeof(uint32_t));
+					client_free_recv_buf(addr);
+					header_cache_free(header_addr);
+					break;
+				}
+				case MSG_CREATE_LOCK_REPLY:
+				case MSG_ASK_LOCK_REPLY:
+				{
+					struct lite_lock_form *tmp;
+					tmp = (struct lite_lock_form *)addr;
+					if(tmp->lock_num!=-1)
 					{
-						struct client_ah_combined *input_ah_attr;
-						struct ib_ah_attr ah_attr;
-						int node_id;
-						input_ah_attr = (struct client_ah_combined *) addr;
-						node_id = input_ah_attr->node_id;
-						memcpy(&ctx->ah_attrUD[node_id], addr, sizeof(struct client_ah_combined));
-						memset(&ah_attr, 0, sizeof(struct ib_ah_attr));
-						ah_attr.dlid      = ctx->ah_attrUD[node_id].dlid;
-						ah_attr.sl        = UD_QP_SL;
-						ah_attr.src_path_bits = 0;
-						ah_attr.port_num = 1;
-						if(SGID_INDEX!=-1)
-						{
-							//ah_attr.grh.dgid = ctx->ah_attrUD[node_id].gid;
-							memcpy(&ah_attr.grh.dgid, &ctx->ah_attrUD[node_id].gid, sizeof(union ib_gid));
-							ah_attr.ah_flags = 1;
-							ah_attr.grh.sgid_index = SGID_INDEX;
-							ah_attr.grh.hop_limit = 1;
-						}
-						ctx->ah[node_id] = ib_create_ah(ctx->pd, &ah_attr);
-						printk(KERN_CRIT "%s: create UD dlid %d qpn %d nodeid %d ah %p\n", __func__, ctx->ah_attrUD[node_id].dlid, ctx->ah_attrUD[node_id].qpn, ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
-						client_free_recv_buf(addr);
-						header_cache_free(header_addr);
-						break;
-					}
-					case MSG_GET_SEND_AND_REPLY_2:
-					case MSG_GET_ATOMIC_REPLY:
-					case MSG_GET_REMOTEMR_REPLY:
-					case MSG_ASSIGN_LOCK:
-					case MSG_ASK_MR_2:
-					case MSG_QUERY_PORT_2:
-					{
-						if(header_addr->length > 5120)
-						{
-							printk(KERN_CRIT "IB_BUG: from lid %d receive type %d with len %d addr: %llu semaphore: %llu\n", wc[i].slid, type, header_addr->length, header_addr->store_addr, header_addr->store_semaphore);
-						}
 						memcpy((void *)header_addr->store_addr, addr, header_addr->length);
 						memcpy((void *)header_addr->store_semaphore, &header_addr->length, sizeof(uint32_t));
-						client_free_recv_buf(addr);
-						header_cache_free(header_addr);
-						break;
 					}
-					case MSG_CREATE_LOCK_REPLY:
-					case MSG_ASK_LOCK_REPLY:
+					else
 					{
-						struct lite_lock_form *tmp;
-						tmp = (struct lite_lock_form *)addr;
-						if(tmp->lock_num!=-1)
-						{
-							memcpy((void *)header_addr->store_addr, addr, header_addr->length);
-							memcpy((void *)header_addr->store_semaphore, &header_addr->length, sizeof(uint32_t));
-						}
-						else
-						{
-							int ret = SEND_REPLY_EMPTY;
-							memcpy((void *)header_addr->store_semaphore, &ret, sizeof(int));
-						}
-						client_free_recv_buf(addr);
-						header_cache_free(header_addr);
-						break;
+						int ret = SEND_REPLY_EMPTY;
+						memcpy((void *)header_addr->store_semaphore, &ret, sizeof(int));
 					}
-					case MSG_GET_SEND_AND_REPLY_OPT_2:
-					{
-						//*(header_addr->store_addr) = addr;
-						//memcpy((void *)header_addr->store_addr, &addr, sizeof(void *));
-						*(void **)header_addr->store_addr = addr;
-						*(int *)header_addr->store_semaphore = header_addr->length;
-						//kmem_cache_free(header_cache, header_addr);
-						header_cache_free(header_addr);
-						break;
-					}
-					default:
-					{
-						printk(KERN_ALERT "%s: [SIGNIFICANT ERROR]from lid %d Weird type received as %d\n", __func__, wc[i].slid, type);
-					}	
+					client_free_recv_buf(addr);
+					header_cache_free(header_addr);
+					break;
 				}
-				/*else if(type == MSG_GET_ATOMIC_START || type == MSG_GET_ATOMIC_SINGLE_START)
-				{
-					int request_len = 0;
-					memcpy(&request_len, addr, header_addr->length);
-					//printk(KERN_CRIT "connection %d receive atomic reqs with length %d\n",connection_id, request_len);
-					ctx->atomic_buffer[connection_id] = (struct atomic_struct *)kmalloc(request_len * sizeof(struct atomic_struct), GFP_ATOMIC);
-					ctx->atomic_buffer_total_length[connection_id] = request_len;
-					ctx->atomic_buffer_cur_length[connection_id] = 0;
+
+				case MSG_GET_SEND_AND_REPLY_OPT_2: {
+					//*(header_addr->store_addr) = addr;
+					//memcpy((void *)header_addr->store_addr, &addr, sizeof(void *));
+					*(void **)header_addr->store_addr = addr;
+					*(int *)header_addr->store_semaphore = header_addr->length;
 					//kmem_cache_free(header_cache, header_addr);
 					header_cache_free(header_addr);
+					break;
 				}
-				else if(type == MSG_GET_ATOMIC_MID || type == MSG_GET_ATOMIC_SINGLE_MID)
-				{
-					int cur_number;
-					if(ctx->atomic_buffer_cur_length[connection_id]<0)
-					{
-						printk(KERN_CRIT "IB_BUG:RECEIVE ATOMIC_MID without getting ATOMIC_START: from connection :%d data len: %d file type %d cur_len in ctx:%d\n", connection_id,  header_addr->length, type, ctx->atomic_buffer_cur_length[connection_id]);
-					}
-					cur_number = ctx->atomic_buffer_cur_length[connection_id];
-					printk(KERN_CRIT "%d receive atomic reqs cur_number %d vaddr %p len %d num-atomic-receieved %d as type %d \n", connection_id, cur_number, addr, header_addr->length, ctx->atomic_buffer_cur_length[connection_id], type);
-					//char *temp_memspace;
-					//temp_memspace = kmalloc(RDMA_BUFFER_SIZE*4, GFP_KERNEL);
-					//memcpy(temp_memspace, addr, header_addr->length);
-					//ctx->atomic_buffer[connection_id][cur_number].vaddr = temp_memspace;
-					ctx->atomic_buffer[connection_id][cur_number].vaddr = addr;
 
-					ctx->atomic_buffer[connection_id][cur_number].len = header_addr->length;
-					//printk(KERN_CRIT "receive atomic reqs cur_number %d vaddr %lx len %d num-atomic-receieved %d\n", 
-					//		cur_number, addr, header_addr->length, ctx->atomic_buffer_cur_length[connection_id]);
-					ctx->atomic_buffer_cur_length[connection_id]++;
-					if(ctx->atomic_buffer_cur_length[connection_id]==ctx->atomic_buffer_total_length[connection_id])
-					{
-						//ctx->atomic_send_handler(ctx->atomic_buffer[connection_id], ctx->atomic_buffer_cur_length[connection_id]);
-						struct send_and_reply_format *recv;
-						recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+				default:
+					printk(KERN_ALERT "%s: [SIGNIFICANT ERROR]from lid %d Weird type received as %d\n", __func__, wc[i].slid, type);
+				}
 
-						recv->msg = (char *)ctx->atomic_buffer[connection_id];
-						recv->src_id = header_addr->src_id;
-						recv->store_addr = header_addr->store_addr;
-						recv->store_semaphore = header_addr->store_semaphore;
-						//recv->length = header_addr->length;
-						recv->length = ctx->atomic_buffer_total_length[connection_id];
-						recv->type = type;
-
-						//					printk(KERN_CRIT "MSG_GET_ATOMIC_MID length %d type %d\n", recv->length, recv->type);
-
-						// temprory fix to always create new thread of handler for atomic operations, TODO: create new apis to do this separately from normal atomic operations
-						if (type == MSG_GET_ATOMIC_MID)
-						{
-							struct thread_pass_struct *thread_pass = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
-							thread_pass->ctx = ctx;
-							thread_pass->sr_request = recv;
-							kthread_run((void *)atomic_send_reply_thread_helper, thread_pass, "atomicsendreply handler");
-						}
-						if (type == MSG_GET_ATOMIC_SINGLE_MID)
-						{
-							struct thread_pass_struct *thread_pass = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
-							thread_pass->ctx = ctx;
-							thread_pass->sr_request = recv;
-							kthread_run((void *)atomic_send_thread_helper, thread_pass, "atomicsendreply handler");
-						}	
-						ctx->atomic_buffer_cur_length[connection_id]=-1;
-						// normal atomic operations that use the same thread of handler 
-						//spin_lock(&wq_lock);
-						//list_add_tail(&(recv->list), &request_list.list);
-						//spin_unlock(&wq_lock);
-					}
-					//kmem_cache_free(header_cache, header_addr);
-					header_cache_free(header_addr);
-				}*/
 				if(ctx->recv_numUD==ctx->rx_depth/4)
 				{
 					//client_post_receives_message_UD(ctx, ctx->rx_depth);
@@ -3813,9 +3742,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 				kmem_cache_free(intermediate_cache, p_r_i_struct);
 			}
 			else
-			{	
 				printk(KERN_ALERT "UD Recv weird event as %d\n", (int)wc[i].opcode);
-			}
 
 		}
 	}
