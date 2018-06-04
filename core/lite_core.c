@@ -516,6 +516,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		return NULL;
 	}
 
+#if 0
 	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE |
 							 IB_ACCESS_REMOTE_WRITE |
 							 IB_ACCESS_REMOTE_READ |
@@ -529,6 +530,9 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		ctx->proc->uobject = NULL;
 		ctx->proc->need_inval = NULL;
 	}
+#else
+	ctx->proc = ctx->pd->__internal_mr;
+#endif
 	lite_dp("ctx->proc->lkey: %#x", ctx->proc->lkey);
 
 	ctx->send_state = kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
