@@ -86,8 +86,13 @@ static void ibv_add_one(struct ib_device *device)
 	pr_info("%s(): liteapi_dev=%p(%s) device=%p(%s)\n",
 		__func__, liteapi_dev, liteapi_dev ? liteapi_dev->name : " ", device, device->name);
 
+	if (liteapi_dev) {
+		pr_info(" skip\n");
+		return;
+	}
+
 	liteapi_dev = device;
-	
+
 	ctx_pd = ib_alloc_pd(device, 0);
 	if (!ctx_pd) {
 		printk(KERN_ALERT "Couldn't allocate PD\n");
