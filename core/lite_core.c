@@ -520,8 +520,9 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 	ctx->proc = ctx->pd->__internal_mr;
 
-	pr_crit("%s():%d pd->__internal_mr = ctx->prc = %p lkey=%#x\n",
-		__func__, __LINE__, ctx->pd->__internal_mr, ctx->proc->lkey);
+	pr_crit("%s():%d pd->__internal_mr = ctx->prc = %p lkey=%#x iova=%#Lx length=%#x\n",
+		__func__, __LINE__, ctx->pd->__internal_mr, ctx->proc->lkey,
+		ctx->proc->iova, ctx->proc->length);
 
 #if 0
 	/*
@@ -1003,9 +1004,11 @@ inline uintptr_t client_ib_reg_mr_addr(ltc *ctx, void *addr, size_t length)
 
 	ret = ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
 
+#if 0
 	pr_info("%s(): (%s) addr: %p len:%zu ret_addr: %#llx\n",
 		__func__, ((struct ib_device *)ctx->context)->name,
 		addr, length, ret);
+#endif
 	return ret;
 #endif
 }
@@ -3894,8 +3897,8 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
 
-	pr_info("%s(): addr: %#llx len:%#x lkey %#x \n", __func__, sge[0].addr, sge[0].length, sge[0].lkey);
-	pr_info("%s(): addr: %#llx len:%#x lkey %#x \n", __func__, sge[1].addr, sge[1].length, sge[1].lkey);
+	pr_info("%s(): sge[0] addr: %#llx len:%#x lkey %#x \n", __func__, sge[0].addr, sge[0].length, sge[0].lkey);
+	pr_info("%s(): sge[1] addr: %#llx len:%#x lkey %#x \n", __func__, sge[1].addr, sge[1].length, sge[1].lkey);
 
 	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
 	if (ret == 0) {

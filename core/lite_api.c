@@ -1595,7 +1595,6 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 	uintptr_t tempaddr;
 	int wait_send_reply_id;
 	ltc *ctx = LITE_ctx;
-	//struct lmr_info *ret_mr = (struct lmr_info *)kmem_cache_alloc(lmr_info_cache, GFP_KERNEL);
 
 	int roundup_size = ROUND_UP(size, REMOTE_MEMORY_PAGE_SIZE);
 	int remaining_size = roundup_size;
@@ -1615,8 +1614,8 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 		printk(KERN_CRIT "atomic operation can only be assigned with 8 bytes instead of %d\n", size);
 		return MR_ASK_REFUSE;
 	}	
-        if(target_node == 0)
-        {
+
+        if(target_node == 0) {
                 round_robin_list = kmalloc(sizeof(int)*total_node-1, GFP_KERNEL);
                 j=0;
                 for(i=1;i<=total_node;i++)
@@ -1656,38 +1655,42 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 		}
                 kfree(round_robin_list);
         }
-	if(target_node != ctx->node_id) //remote side allocation
-	{
+
+	/* Remote Allocation */
+	if(target_node != ctx->node_id) {
+		lite_dp("required_mr_num=%d", required_mr_num);
 		for(i=0;i<required_mr_num && remaining_size >0;i++)
 		{
 			unsigned long start_jiffies;
 
+			lite_dp("i=%d required_mr_num=%d", i, required_mr_num);
+
 			ret_mr = client_alloc_lmr_info_buf();
 			wait_send_reply_id = SEND_REPLY_WAIT;
 			request_size = MIN(remaining_size, LITE_MEMORY_BLOCK);
-			if(request_size <=0)
-			{
+			if(request_size <=0) {
 				printk("%s: error in request_size %d handling\n", __func__, request_size);
 				break;
 			}
 
 			tempaddr = client_ib_reg_mr_addr(ctx, &request_size, sizeof(int));
-			if(atomic_flag)
-			{
+			if(atomic_flag) {
 				remaining_size=sizeof(uint64_t);
 				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
 				if (ret)
 					return -EFAULT;
 			} else {
 				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
-				if (ret)
+				if (ret) {
+					lite_dp("ret=%d", ret);
 					return -EFAULT;
+				}
 			}
 
 			start_jiffies = jiffies;
 			while(wait_send_reply_id==SEND_REPLY_WAIT) {
 				if (time_after(jiffies, start_jiffies + 10 * HZ)) {
-					lite_err("FK get a timeout! target_node: %d", target_node);
+					lite_err("Get a timeout! target_node: %d", target_node);
 					return -EFAULT;
 				}
 				cpu_relax();
@@ -1696,9 +1699,8 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			ret_mr_list[i] = ret_mr;
 			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 
 		}
-	}
-	else//local allocation
-	{
+	} else {
+		/* Local Allocation */
 		void *addr;
 		for(i=0;i<required_mr_num;i++)
 		{
@@ -1715,16 +1717,13 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 
 		}
 	}
+
 	tmp_lmr = atomic_add_return(1, &ctx->lmr_inc);
-	//printk(KERN_CRIT "%s: lmr %d required_mr_num %d, roundupsize %d\n", __func__, tmp_lmr, required_mr_num, roundup_size);
-	if(atomic_flag)
-	{
+	if (atomic_flag)
 		client_create_metadata_by_lmr(ctx, tmp_lmr, ret_mr_list, 1, target_node, sizeof(uint64_t), (MR_READ_FLAG | MR_WRITE_FLAG | MR_SHARE_FLAG | MR_ADMIN_FLAG | MR_ATOMIC_FLAG), 0, password);
-	}
 	else
 		client_create_metadata_by_lmr(ctx, tmp_lmr, ret_mr_list, required_mr_num, target_node, roundup_size, (MR_READ_FLAG | MR_WRITE_FLAG | MR_SHARE_FLAG | MR_ADMIN_FLAG), 0, password);
-	//printk(KERN_CRIT "%s: lmr %d finish\n", __func__, tmp_lmr);
-	
+
 	return tmp_lmr;
 }
 EXPORT_SYMBOL(liteapi_alloc_remote_mem);
