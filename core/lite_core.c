@@ -1005,10 +1005,10 @@ inline uintptr_t client_ib_reg_mr_addr(ltc *ctx, void *addr, size_t length)
 
 	ret = ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
 
-#if 0
-	pr_info("%s(): (%s) addr: %p len:%zu ret_addr: %#llx\n",
+#if 1
+	pr_info("%s(): (%s) kvaddr: %p pa: %#llx len:%zu dma_addr: %#llx\n",
 		__func__, ((struct ib_device *)ctx->context)->name,
-		addr, length, ret);
+		addr, virt_to_phys(addr), length, ret);
 #endif
 	return ret;
 #endif
@@ -3859,7 +3859,7 @@ EXPORT_SYMBOL(client_send_message_local_reply);
  * @store_semaphore: semaphore of reply buffer
  * @priority: priority level
  */
-int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority)
+int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
 {	
 	struct ib_ud_wr ud_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
@@ -3867,9 +3867,17 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	int ret;
 	int ne, i;
 	struct ib_wc wc[2];
+	void *tmp_addr = NULL;
 
-	struct liteapi_header output_header;
+	struct liteapi_header *output_header;
 	void *output_header_addr;
+
+	output_header = kzalloc(sizeof(*output_header), GFP_KERNEL);
+
+	if (addr_kvaddr) {
+		tmp_addr = kmalloc(size, GFP_KERNEL);
+		memcpy(tmp_addr, addr_kvaddr, size);
+	}
 
 	spin_lock(&ctx->connection_lockUD);
 
@@ -3887,28 +3895,31 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	ud_wr.remote_qpn = ctx->ah_attrUD[target_node].qpn;
 	ud_wr.remote_qkey = ctx->ah_attrUD[target_node].qkey;
 
-	client_setup_liteapi_header(ctx->node_id, store_addr, store_semaphore, size, priority, type, &output_header);
-	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, &output_header, sizeof(struct liteapi_header));
+	client_setup_liteapi_header(ctx->node_id, store_addr, store_semaphore, size, priority, type, output_header);
+	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, output_header, sizeof(struct liteapi_header));
 
 	sge[0].addr = (uintptr_t)output_header_addr;
 	sge[0].length = sizeof(struct liteapi_header);
 	sge[0].lkey = ctx->proc->lkey;
 
-	sge[1].addr = (uintptr_t)addr;
+	if (addr_kvaddr)
+		sge[1].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, tmp_addr, size);
+	else
+		sge[1].addr = (uintptr_t)addr;
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
 
 	pr_info("%s(): sge[0] addr: %#llx len:%#x lkey %#x \n", __func__, sge[0].addr, sge[0].length, sge[0].lkey);
 	pr_info("%s(): sge[1] addr: %#llx len:%#x lkey %#x \n", __func__, sge[1].addr, sge[1].length, sge[1].lkey);
 
-	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
 	if (ret == 0) {
 		do {
 			ne = ib_poll_cq(ctx->send_cqUD, 1, wc);
 			if (ne < 0) {
 				printk(KERN_ALERT "poll send_cq failed at UD\n");
-				return 1;
+				ret = 1;
+				goto out;
 			}
 		} while (ne<1);
 
@@ -3917,13 +3928,30 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 				lite_err("type:%d wr->wr_id:%Lu wc[%d]->wr_id: %Lu Send failed at UD as %d (%s)",
 					type, wr->wr_id, i, wc[i].wr_id,
 					wc[i].status, ib_wc_status_msg(wc[i].status));
-				return 2;
+				ret = 2;
+				goto out;
 			}
 		}
 	} else
 		lite_err("post_send fail at UD ret=%d", ret);
 	spin_unlock(&ctx->connection_lockUD);
+
+out:
+	kfree(output_header);
+	if (addr_kvaddr)
+		kfree(tmp_addr);
 	return ret;
+}
+
+int client_send_message_sge_UD_tmp(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
+{
+	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, addr_kvaddr);
+}
+EXPORT_SYMBOL(client_send_message_sge_UD_tmp);
+
+int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority)
+{
+	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, NULL);
 }
 EXPORT_SYMBOL(client_send_message_sge_UD);
 

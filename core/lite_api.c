@@ -86,10 +86,12 @@ static void ibv_add_one(struct ib_device *device)
 	pr_info("%s(): liteapi_dev=%p(%s) device=%p(%s)\n",
 		__func__, liteapi_dev, liteapi_dev ? liteapi_dev->name : " ", device, device->name);
 
+#if 0
 	if (liteapi_dev) {
 		pr_info(" skip\n");
 		return;
 	}
+#endif
 
 	liteapi_dev = device;
 	
@@ -1684,11 +1686,11 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			tempaddr = client_ib_reg_mr_addr(ctx, &request_size, sizeof(int));
 			if(atomic_flag) {
 				remaining_size=sizeof(uint64_t);
-				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
+				ret = client_send_message_sge_UD_tmp(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY, &request_size);
 				if (ret)
 					return -EFAULT;
 			} else {
-				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
+				ret = client_send_message_sge_UD_tmp(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY, &request_size);
 				if (ret) {
 					lite_dp("ret=%d", ret);
 					return -EFAULT;
