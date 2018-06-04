@@ -506,43 +506,36 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 	ctx->channel = NULL;
 
-	/*
-	 * HACK!!
-	 *
-	 * MR is allocated within alloc_pd.
-	 * MR does NOT have remote_atomic flag.
-	 */
 	ctx->pd = ib_alloc_pd(ib_dev, IB_PD_UNSAFE_GLOBAL_RKEY	|
 				      IB_ACCESS_LOCAL_WRITE	|
 				      IB_ACCESS_REMOTE_READ	|
-				      IB_ACCESS_REMOTE_WRITE	|
-				      IB_ACCESS_REMOTE_ATOMIC );
+				      IB_ACCESS_REMOTE_WRITE);
 	if (IS_ERR_OR_NULL(ctx->pd)) {
 		lite_err("Fail to initialize pd / ctx->pd and MR, ret=%d",
 			PTR_ERR_OR_ZERO(ctx->pd));
 		return NULL;
 	}
-	ctx->proc = ctx->pd->__internal_mr;
 
-	pr_crit("%s():%d pd->local_dma_lkey=%#x pd->__internal_mr = ctx->prc = %p lkey=%#x iova=%#Lx length=%#x\n",
-		__func__, __LINE__, ctx->pd->local_dma_lkey, ctx->pd->__internal_mr, ctx->proc->lkey,
-		ctx->proc->iova, ctx->proc->length);
+	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE |
+							 IB_ACCESS_REMOTE_WRITE |
+							 IB_ACCESS_REMOTE_READ |
+							 IB_ACCESS_REMOTE_ATOMIC);
+	if (IS_ERR(ctx->proc)) {
+		lite_err("Fail to create mr: %ld", PTR_ERR(ctx->proc));
+		return NULL;
+	} else {
+		ctx->proc->device = ctx->pd->device;
+		ctx->proc->pd = ctx->pd;
+		ctx->proc->uobject = NULL;
+		ctx->proc->need_inval = NULL;
+	}
+	lite_dp("ctx->proc->lkey: %#x", ctx->proc->lkey);
 
-#if 0
-	/*
-	 * Old way of allocating MR (3.10 3.11)
-	 */
-	ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
-	//ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
-#endif
+	ctx->send_state = kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
+	ctx->recv_state = kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
 
-	ctx->send_state = (enum s_state *)kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
-	ctx->recv_state = (enum r_state *)kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
-
-	if(SGID_INDEX != -1)
-	{
-		if(ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &ctx->gid, NULL))
-		{
+	if (SGID_INDEX != -1) {
+		if (ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &ctx->gid, NULL)) {
 			printk(KERN_ALERT "Fail to query gid\n");
 			return NULL;
 		}

@@ -88,11 +88,14 @@ static void ibv_add_one(struct ib_device *device)
 
 	liteapi_dev = device;
 	
-	ctx_pd = ib_alloc_pd(device, 0);
-	if (!ctx_pd) {
-		printk(KERN_ALERT "Couldn't allocate PD\n");
+	ctx_pd = ib_alloc_pd(device, IB_PD_UNSAFE_GLOBAL_RKEY	|
+				     IB_ACCESS_LOCAL_WRITE	|
+				     IB_ACCESS_REMOTE_READ	|
+				     IB_ACCESS_REMOTE_WRITE);
+	if (IS_ERR_OR_NULL(ctx_pd)) {
+		pr_crit("Fail to create PD");
+		WARN_ON_ONCE(1);
 	}
-	return;
 }
 
 static void ibv_remove_one(struct ib_device *device, void *_unused)
