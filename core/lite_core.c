@@ -512,7 +512,11 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	 * MR is allocated within alloc_pd.
 	 * MR does NOT have remote_atomic flag.
 	 */
-	ctx->pd = ib_alloc_pd(ib_dev, IB_PD_UNSAFE_GLOBAL_RKEY);
+	ctx->pd = ib_alloc_pd(ib_dev, IB_PD_UNSAFE_GLOBAL_RKEY	|
+				      IB_ACCESS_LOCAL_WRITE	|
+				      IB_ACCESS_REMOTE_READ	|
+				      IB_ACCESS_REMOTE_WRITE	|
+				      IB_ACCESS_REMOTE_ATOMIC );
 	if (IS_ERR_OR_NULL(ctx->pd)) {
 		lite_err("Fail to initialize pd / ctx->pd and MR, ret=%d",
 			PTR_ERR_OR_ZERO(ctx->pd));
@@ -520,8 +524,8 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 	ctx->proc = ctx->pd->__internal_mr;
 
-	pr_crit("%s():%d pd->__internal_mr = ctx->prc = %p lkey=%#x iova=%#Lx length=%#x\n",
-		__func__, __LINE__, ctx->pd->__internal_mr, ctx->proc->lkey,
+	pr_crit("%s():%d pd->local_dma_lkey=%#x pd->__internal_mr = ctx->prc = %p lkey=%#x iova=%#Lx length=%#x\n",
+		__func__, __LINE__, ctx->pd->local_dma_lkey, ctx->pd->__internal_mr, ctx->proc->lkey,
 		ctx->proc->iova, ctx->proc->length);
 
 #if 0
@@ -3900,6 +3904,7 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 	pr_info("%s(): sge[0] addr: %#llx len:%#x lkey %#x \n", __func__, sge[0].addr, sge[0].length, sge[0].lkey);
 	pr_info("%s(): sge[1] addr: %#llx len:%#x lkey %#x \n", __func__, sge[1].addr, sge[1].length, sge[1].lkey);
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
 	if (ret == 0) {
 		do {
@@ -3908,11 +3913,12 @@ int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, 
 				printk(KERN_ALERT "poll send_cq failed at UD\n");
 				return 1;
 			}
-		} while(ne<1);
+		} while (ne<1);
 
 		for(i=0;i<ne;i++) {
 			if (wc[i].status != IB_WC_SUCCESS) {
-				lite_err("Send failed at UD as %d (%s)",
+				lite_err("type:%d wr->wr_id:%Lu wc[%d]->wr_id: %Lu Send failed at UD as %d (%s)",
+					type, wr->wr_id, i, wc[i].wr_id,
 					wc[i].status, ib_wc_status_msg(wc[i].status));
 				return 2;
 			}
@@ -4016,6 +4022,7 @@ int client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lm
 	sge.lkey = ctx->proc->lkey;
 
 	//test2 ends
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	//test3 starts (ends in client_internal_poll_sendcq) takes 4973ns for 4K read, and takes 1989ns for 8B read
 	if(!ret)
@@ -4777,6 +4784,7 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
         }
 	//test5 ends
 	//test12 ends
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	
 	if(!ret)
@@ -4839,6 +4847,7 @@ int client_rdma_write_with_imm(ltc *ctx, int connection_id, struct lmr_info *inp
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(ret==0){
 		do{
@@ -4993,6 +5002,7 @@ int client_send_request_without_polling(ltc *ctx, int connection_id, enum mode s
 	sge.lkey = ctx->proc->lkey;
 	
 	//self_time = ktime_get();
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	//get_time_difference(size, self_time);
 	if(ret)
@@ -5068,6 +5078,7 @@ int client_fetch_and_add(ltc *ctx, int connection_id, struct lmr_info *input_mr,
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(!ret)
 	{
@@ -5123,6 +5134,7 @@ int client_fetch_and_add_loopback(ltc *ctx, struct lmr_info *input_mr, void *add
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->loopback_out, wr, &bad_wr);
 	if(ret==0){
 		do{
@@ -5177,6 +5189,7 @@ int client_send_request_multiplesge(ltc *ctx, int connection_id, enum mode s_mod
 	rdma_wr.remote_addr = (uintptr_t) input_mr->addr;
 	rdma_wr.rkey = input_mr->rkey;
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(ret==0){
 		do{
@@ -5253,6 +5266,7 @@ int client_compare_swp(ltc *ctx, int connection_id, struct lmr_info *remote_mr, 
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if(!ret)
 	{
@@ -5315,6 +5329,7 @@ int client_compare_swp_loopback(ltc *ctx, struct lmr_info *remote_mr, void *addr
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
 
+	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->loopback_out, wr, &bad_wr);
 
 	if(ret==0){
