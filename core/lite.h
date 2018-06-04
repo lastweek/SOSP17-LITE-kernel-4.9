@@ -108,7 +108,7 @@
 	pr_info("%s():%d "fmt"\n", __func__, __LINE__, __VA_ARGS__)
 
 #define lite_dp(fmt, ...)	\
-	pr_info("%s():%d "fmt"\n", __func__, __LINE__, __VA_ARGS__)
+	pr_crit("%s():%d "fmt"\n", __func__, __LINE__, __VA_ARGS__)
 
 
 #define DEBUG_SHINYEH
