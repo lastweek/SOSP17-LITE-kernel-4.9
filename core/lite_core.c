@@ -2338,15 +2338,12 @@ int waiting_queue_handler(ltc *ctx)
 
 					//connection_id = client_get_connection_by_atomic_number(ctx, new_request->src_id, LOW_PRIORITY);
 
-					pr_info("%s(): Get alloc remote mr req\n", __func__);
 					addr = client_alloc_memory_for_mr(length*sizeof(char));
                                         if(addr)
                                         {
 						ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 						tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
-					pr_info("%s(): Get alloc remote mr req 1\n", __func__);
-						client_send_message_sge_UD_tmp(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY, ret_mr);
-					pr_info("%s(): Get alloc remote mr req 2\n", __func__);
+						client_send_message_sge_UD(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
                                         }
                                         else
                                         {
@@ -3800,7 +3797,7 @@ EXPORT_SYMBOL(client_send_message_local_reply);
  */
 int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr,
 				 int size, uint64_t store_addr, uint64_t store_semaphore,
-				 int priority, void *addr_kvaddr)
+				 int priority, const char *func, int line)
 {
 	struct ib_ud_wr ud_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
@@ -3808,17 +3805,11 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 	int ret;
 	int ne, i;
 	struct ib_wc wc[2];
-	void *tmp_addr = NULL;
 
 	struct liteapi_header *output_header;
 	void *output_header_addr;
 
 	output_header = kzalloc(sizeof(*output_header), GFP_KERNEL);
-
-	if (addr_kvaddr) {
-		tmp_addr = kmalloc(size, GFP_KERNEL);
-		memcpy(tmp_addr, addr_kvaddr, size);
-	}
 
 	spin_lock(&ctx->connection_lockUD);
 
@@ -3843,10 +3834,7 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 	sge[0].length = sizeof(struct liteapi_header);
 	sge[0].lkey = ctx->proc->lkey;
 
-	if (addr_kvaddr)
-		sge[1].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, tmp_addr, size);
-	else
-		sge[1].addr = (uintptr_t)addr;
+	sge[1].addr = (uintptr_t)addr;
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
 
@@ -3879,22 +3867,9 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 out:
 	spin_unlock(&ctx->connection_lockUD);
 	kfree(output_header);
-	if (addr_kvaddr)
-		kfree(tmp_addr);
 	return ret;
 }
-
-int client_send_message_sge_UD_tmp(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
-{
-	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, addr_kvaddr);
-}
-EXPORT_SYMBOL(client_send_message_sge_UD_tmp);
-
-int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority)
-{
-	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, NULL);
-}
-EXPORT_SYMBOL(client_send_message_sge_UD);
+EXPORT_SYMBOL(__client_send_message_sge_UD);
 
 int client_send_cq_poller(ltc *ctx)
 {
@@ -4602,13 +4577,18 @@ int client_send_message_with_rdma_emulated_for_local(ltc *ctx, int port, void *a
  * @sge_length: support multiple sge length in this request or not (for multicast)
  * @input_atomic: input multicast message structure (for multicast)
  * @force_poll_flag: force polling or avoid polling if possible
+ *
+ * RDMA Write with Immediate
  */
-int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connection_id, uint32_t input_mr_rkey, uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode, struct imm_message_metadata *header, int userspace_flag, int sge_length, struct atomic_struct *input_atomic, int force_poll_flag)
+int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connection_id,
+			uint32_t input_mr_rkey, uintptr_t input_mr_addr, void *addr,
+			int size, int offset, uint32_t imm, enum mode s_mode,
+			struct imm_message_metadata *header, int userspace_flag,
+			int sge_length, struct atomic_struct *input_atomic, int force_poll_flag)
 {
 	struct ib_rdma_wr rdma_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge[32];
-	//struct lmr_info *ret;
 	int ret;
 	uintptr_t temp_addr;
 	uintptr_t temp_header_addr;
@@ -4617,17 +4597,13 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
 	int flag = 0;
         int i;
 
-	//spin_lock(&connection_lock[connection_id]);
-
-	retry_send_imm_request:
+retry_send_imm_request:
 
 	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
 	wr = &rdma_wr.wr;
 	wr->sg_list = sge;
-
-	//wr->wr_id = connection_id;
 
 	rdma_wr.remote_addr = (uintptr_t) (input_mr_addr+offset);
 	rdma_wr.rkey = input_mr_rkey;
@@ -4661,23 +4637,24 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
+
                 //It's always a kernel space call. Therefore
-		#ifdef LITE_GET_SIZE
+#ifdef LITE_GET_SIZE
 			int total_size = 0;
-		#endif
+#endif
                 for(i=0;i<sge_length;i++)
                 {
                         temp_addr = client_ib_reg_mr_addr(ctx, input_atomic[i].vaddr, input_atomic[i].len);
 			sge[i+1].addr = temp_addr;
 			sge[i+1].length = input_atomic[i].len;
 			sge[i+1].lkey = ctx->proc->lkey;
-			#ifdef LITE_GET_SIZE
-				total_size = total_size + input_atomic[i].len;
-			#endif
+#ifdef LITE_GET_SIZE
+			total_size = total_size + input_atomic[i].len;
+#endif
                 }
-		#ifdef LITE_GET_SIZE
+#ifdef LITE_GET_SIZE
 			printk(KERN_CRIT "[%s] size: %d\n", total_size);
-		#endif
+#endif
 
         }
         else

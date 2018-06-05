@@ -44,7 +44,8 @@
 
 int __client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int offset, int userspace_flag, int *poll_addr, const char *func, int line);
 
-#define client_send_request(a,b,c,d,e,f,g,h,i)	__client_send_request(a,b,c,d,e,f,g,h,i, __func__, __LINE__)
+#define client_send_request(a,b,c,d,e,f,g,h,i)		\
+	__client_send_request(a,b,c,d,e,f,g,h,i, __func__, __LINE__)
 
 int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum ib_mtu mtu, int sl, struct lite_dest *dest);
 
@@ -52,8 +53,10 @@ ltc *client_init_ctx(int size,int rx_depth, int port, struct ib_device *ib_dev);
 
 ltc *client_init_interface(int ib_port, struct ib_device *ib_dev);
 
-int client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority);
-int client_send_message_sge_UD_tmp(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr);
+int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, const char *func, int line);
+
+#define client_send_message_sge_UD(a,b,c,d,e,f,g,h)	\
+	__client_send_message_sge_UD(a,b,c,d,e,f,g,h,__func__,__LINE__)
 
 int client_msg_to_lite_dest(char *msg, struct lite_dest *rem_dest);
 int client_gen_msg(ltc *ctx, char *msg, int connection_id);

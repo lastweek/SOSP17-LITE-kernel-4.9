@@ -1,6 +1,8 @@
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_umem.h>
 #include <rdma/ib_user_verbs.h>
+#include <linux/sched.h>
+#include <asm/asm.h>
 
 #include "lite_api.h"
 
@@ -1699,11 +1701,11 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			tempaddr = client_ib_reg_mr_addr(ctx, &request_size, sizeof(int));
 			if(atomic_flag) {
 				remaining_size=sizeof(uint64_t);
-				ret = client_send_message_sge_UD_tmp(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY, &request_size);
+				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTE_ATOMIC_OPERATION, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
 				if (ret)
 					return -EFAULT;
 			} else {
-				ret = client_send_message_sge_UD_tmp(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY, &request_size);
+				ret = client_send_message_sge_UD(ctx, target_node, MSG_GET_REMOTEMR, (void *)tempaddr, sizeof(int), (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
 				if (ret) {
 					lite_dp("ret=%d", ret);
 					return -EFAULT;
@@ -2261,16 +2263,17 @@ EXPORT_SYMBOL(liteapi_alloc_continuous_memory);
 int liteapi_establish_conn(char *servername, int eth_port, int ib_port)
 {
 	ltc *ctx;
+	int unused;
 
-	printk(KERN_CRIT "Start calling rc_internal to create LITE based on %p\n", liteapi_dev);
-	printk(KERN_CRIT "Server:%s eth port:%d ib port:%d\n", servername, eth_port, ib_port);
+	lite_dp("Start calling rc_internal to create LITE based on %p(%s)",
+		liteapi_dev, liteapi_dev->name);
+	lite_dp("Server: %s eth port:%d ib port:%d", servername, eth_port, ib_port);
+	lite_dp("current_stack: %#lx %p\n", current_stack_pointer, &unused);
 
 	ctx = client_establish_conn(liteapi_dev, servername, eth_port, ib_port);
-
-	if(!ctx)
-	{
+	if (!ctx) {
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;
+		return -EIO;
 	}
 
 	spin_lock_init(&umap_lmr_lock);
@@ -2282,14 +2285,8 @@ int liteapi_establish_conn(char *servername, int eth_port, int ib_port)
 	ctx->send_reply_opt_handler = handle_send_reply_opt;
 	ctx->ask_mr_handler = handle_ask_mr;
 
-
-	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, ctx->node_id);
-	printk(KERN_CRIT "Pass all possible test and return\n");
-	/*char temp_test[36];
-	uintptr_t tempaddr;
-	sprintf(temp_test, "test from client %d\n", ctx->node_id);
-	tempaddr = client_ib_reg_mr_addr(ctx, temp_test, 36);
-	client_send_message_sge_UD(ctx, 0, MSG_CLIENT_SEND, tempaddr, strlen(temp_test), 0, 0, 0);*/
+	pr_info("%s: Connected with server. Note ID: %d\n",
+		__func__, ctx->node_id);
 	return ctx->node_id;
 }
 EXPORT_SYMBOL(liteapi_establish_conn);
