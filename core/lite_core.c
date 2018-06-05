@@ -3947,9 +3947,10 @@ int client_send_cq_poller(ltc *ctx)
  * This function is used to send RDMA-Read or RDMA-Write.
  * It is not SEND.
  */
-int client_send_request(ltc *ctx, int connection_id, enum mode s_mode,
-			struct lmr_info *input_mr, void *addr, int size,
-			int offset, int userspace_flag, int *poll_addr)
+int __client_send_request(ltc *ctx, int connection_id, enum mode s_mode,
+			  struct lmr_info *input_mr, void *addr, int size,
+			  int offset, int userspace_flag, int *poll_addr,
+			  const char *func, int line)
 {
 	struct ib_rdma_wr rdma_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
@@ -3977,7 +3978,9 @@ retry_send_request:
 	rdma_wr.rkey = input_mr->rkey;
 
 	/*
-	 * Why?
+	 * So..
+	 * If userspace_flag is set, addr is already a DMA address
+	 * If userspace_flag is not set, addr is a kernel virtual address.
 	 */
 	if (userspace_flag)
 		sge.addr = (uintptr_t)addr;
@@ -3986,11 +3989,16 @@ retry_send_request:
 		sge.addr = tempaddr;
 	}
 
-	sge.length = size;
+	/*
+	 * ctx->proc is a memory region that covers
+	 * the whole physical memory.
+	 */
 	sge.lkey = ctx->proc->lkey;
+	sge.length = size;
 
-	lite_dp("ib_post_send: userspace_flag=%d poll_addr=%p sge[addr=%#llx, len=%#x]",
-		userspace_flag, poll_addr, sge.addr, sge.length);
+	lite_dp("caller[%s:%d] addr=%p userspace=%d poll_addr=%p sge[addr=%#llx, len=%#x]",
+		func, line,
+		addr, userspace_flag, poll_addr, sge.addr, sge.length);
 
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if (!ret) {
@@ -4004,7 +4012,7 @@ retry_send_request:
 
 	return ret;
 }
-EXPORT_SYMBOL(client_send_request);
+EXPORT_SYMBOL(__client_send_request);
 
 /**
  * client_internal_poll_sendcq - polling the send-cq by a sharing way
@@ -4014,7 +4022,7 @@ EXPORT_SYMBOL(client_send_request);
  */
 int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
-        #ifdef SHARE_POLL_CQ_MODEL
+       #ifdef SHARE_POLL_CQ_MODEL
 	while((*check)==SEND_REPLY_WAIT)
 	{
 		cpu_relax();
@@ -4854,9 +4862,8 @@ int client_rdma_write_offset(ltc *ctx, uint64_t lite_handler, void *local_addr, 
 	struct lmr_info *mr_addr;
 	struct hash_asyio_key *mr_ptr;
 	int ret;
-	//ktime_t self_time = ktime_get();
 	mr_ptr = lmr_to_mr_metadata(lite_handler);
-	//get_time_difference(lite_handler, self_time);
+
 	if(!mr_ptr)
 		return MR_ASK_REFUSE;
 	if(!(mr_ptr->permission & MR_WRITE_FLAG))
@@ -4864,16 +4871,19 @@ int client_rdma_write_offset(ltc *ctx, uint64_t lite_handler, void *local_addr, 
 	mr_addr = mr_ptr->datalist[0];//Since kernel can only access the first block because of 4MB limitation
 	if(!mr_addr)
 		return MR_ASK_UNKNOWN;
+
 	target_node = mr_addr->node_id;
-	if(target_node == ctx->node_id)//local access
-	{
+	if(target_node == ctx->node_id) {
 		void *real_addr;
 		real_addr = __va(mr_addr->addr);//get virtual addr from physical addr
 		memcpy(real_addr+offset, local_addr, size);
 		return 0;
 	}
+
 	connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
-	ret = client_send_request(ctx, connection_id, M_WRITE, mr_addr, local_addr, size, offset, LITE_KERNELSPACE_FLAG, 0);
+	ret = client_send_request(ctx, connection_id, M_WRITE,
+				  mr_addr, local_addr, size,
+				  offset, LITE_KERNELSPACE_FLAG, 0);
 	return ret;
 }
 

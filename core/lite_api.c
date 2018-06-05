@@ -571,6 +571,10 @@ EXPORT_SYMBOL(liteapi_rdma_write_offset);
  * @priority: high, low, or non
  * @offset: request offset
  * @password: pin code of the lite_handler
+ *
+ * HACK!!
+ * This function is called from userspace syscall:
+ *	userspace_liteapi_rdma_write()
  */
 int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int password)
 {
@@ -590,17 +594,6 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
 	int access_index[LITE_MAX_MEMORY_BLOCK], access_length[LITE_MAX_MEMORY_BLOCK], access_offset[LITE_MAX_MEMORY_BLOCK], accumulate_length[LITE_MAX_MEMORY_BLOCK];
         int poll_status[LITE_MAX_MEMORY_BLOCK], connection_id_list[LITE_MAX_MEMORY_BLOCK];
 	unsigned long priority_jiffies;
-
-
-        //memset(access_index, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
-	//memset(access_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
-	//memset(access_offset, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
-	//memset(accumulate_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
-
-	//pte_t *pte = lite_get_pte(current->mm, (unsigned long)local_addr);
-	//struct page *page = pte_page(*pte);
-	//unsigned long phys_addr = page_to_phys(page) + (((uintptr_t)local_addr)&LITE_LINUX_PAGE_OFFSET);
-	//real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
 
 	mr_ptr = lmr_to_mr_metadata(lite_handler);
 	if(!mr_ptr)
@@ -626,6 +619,7 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
         {
 		request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
         }
+
         for(i = 0; i < request_length;i++)
         {
                 curr_index = access_index[i];
@@ -657,27 +651,43 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
                         }
                         continue;
                 }
+
                 connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
                 connection_id_list[i] = connection_id;
+
                 ret = lite_check_page_continuous(local_addr + curr_accumulate, curr_length, &phys_addr);
-                if(ret)//It's continuous
-                {
+
+                if(ret) {
+			/* Contiguous */
                         real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
-                        client_send_request(ctx, connection_id, M_WRITE, mr_addr, real_addr, curr_length, curr_offset, LITE_USERSPACE_FLAG, &poll_status[i]);
-                }
-                else
-                {
+
+			/*
+			 * UserSpace Flag Set
+			 * Pass DMA address
+			 */
+                        client_send_request(ctx, connection_id, M_WRITE, mr_addr,
+					    real_addr, curr_length, curr_offset,
+					    LITE_USERSPACE_FLAG, &poll_status[i]);
+                } else {
+			/* Non-contiguous */
                         real_addr_list[i] = kmalloc(curr_length, GFP_KERNEL);
-                        if(copy_from_user(real_addr_list[i], local_addr + curr_accumulate, curr_length))
-                        {
+                        if (copy_from_user(real_addr_list[i], local_addr + curr_accumulate, curr_length)) {
                                 kfree(real_addr_list[i]);
                                 if(priority == USERSPACE_HIGH_PRIORITY)
                                         atomic_dec(&ctx->high_cur_num_write);
                                 return -EFAULT;
                         }
-                        client_send_request(ctx, connection_id, M_WRITE, mr_addr, real_addr_list[i], curr_length, curr_offset, LITE_KERNELSPACE_FLAG, &poll_status[i]);
+
+			/*
+			 * KernelSpace Flag Set
+			 * Pass kernel virtual address
+			 */
+                        client_send_request(ctx, connection_id, M_WRITE, mr_addr,
+					    real_addr_list[i], curr_length, curr_offset,
+					    LITE_KERNELSPACE_FLAG, &poll_status[i]);
                 }
         }
+
         for(i = 0; i < request_length;i++)
         {
                 if(connection_id_list[i]<0)//local access
