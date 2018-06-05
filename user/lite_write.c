@@ -17,7 +17,7 @@
 
 int write_mode = 0;
 
-int run_times = 10000;
+int run_times = 10;
 
 
 int init_log(int remote_node)
