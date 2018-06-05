@@ -36,7 +36,3 @@ inline long long client_get_time_difference(ktime_t inputtime, ktime_t endtime)
 	return (long long) ktime_to_ns(ktime_sub(endtime, inputtime));
 }
 EXPORT_SYMBOL(client_get_time_difference);
-
-
-
-

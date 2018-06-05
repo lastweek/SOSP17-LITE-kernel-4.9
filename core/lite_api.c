@@ -9,7 +9,7 @@ MODULE_LICENSE("GPL");
 
 
 /**
- * lite_api.c: this code is LITE api part. 
+ * lite_api.c: this code is LITE api part.
  * Most of the function calls are implemeneted in lite_api.c and lite_core.c
  * Roughly, one-sided operations are in lite_api.c.
  * Core functions and connection setup are in lite_core.c
@@ -94,7 +94,7 @@ static void ibv_add_one(struct ib_device *device)
 #endif
 
 	liteapi_dev = device;
-	
+
 	ctx_pd = ib_alloc_pd(device, IB_PD_UNSAFE_GLOBAL_RKEY	|
 				     IB_ACCESS_LOCAL_WRITE	|
 				     IB_ACCESS_REMOTE_READ	|
@@ -307,7 +307,7 @@ int liteapi_rdma_mr_request(uint64_t src_key, int src_offset, uint64_t tar_key, 
 		printk(KERN_CRIT "%s: [error] mr operation can only support request within the first block[BETA]", __func__);
 		return 0;
 	}
-	
+
 	// get src
 	src_ptr = lmr_to_mr_metadata(src_key);
 	if(!src_ptr)
@@ -329,12 +329,12 @@ int liteapi_rdma_mr_request(uint64_t src_key, int src_offset, uint64_t tar_key, 
 		if(!tar_addr_list)
 			return MR_ASK_UNKNOWN;
 	}
-	
+
 	src_addr = src_addr_list[0];
 	tar_addr = tar_addr_list[0];
-		
+
 	target_node = src_addr->node_id;
-			
+
 	memset(&request_form, 0, sizeof(struct mr_request_form));
 	memcpy(&request_form.request_mr, src_addr, sizeof(struct lmr_info));
 	if(op_code != OP_REMOTE_MEMSET)
@@ -352,7 +352,7 @@ int liteapi_rdma_mr_request(uint64_t src_key, int src_offset, uint64_t tar_key, 
 	{
 		client_send_message_local(ctx, target_node, MSG_MR_REQUEST, &request_form, sizeof(struct mr_request_form), (uint64_t)&ret, (uint64_t)&wait_send_reply_id, LOW_PRIORITY);
 	}
-	
+
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		cpu_relax();
 
@@ -485,7 +485,7 @@ inline int liteapi_priority_handling(int priority, int flag, unsigned long *prio
 	}
 	else if(flag == PRIORITY_END)
 	{
-        	if(priority == USERSPACE_HIGH_PRIORITY)
+		if(priority == USERSPACE_HIGH_PRIORITY)
 		{
 			unsigned long cur_jiffies = jiffies;
                         switch(type)
@@ -544,7 +544,7 @@ int liteapi_rdma_write_offset(uint64_t lite_handler, void *local_addr, int size,
 	if(!(mr_ptr->permission & MR_WRITE_FLAG))
 		return MR_ASK_REFUSE;
 	if(mr_ptr->password != password)
-		return MR_ASK_REFUSE; 
+		return MR_ASK_REFUSE;
 	mr_addr = mr_ptr->datalist[0];
 	if(!mr_addr)
 		return MR_ASK_UNKNOWN;
@@ -590,13 +590,13 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
 	int access_index[LITE_MAX_MEMORY_BLOCK], access_length[LITE_MAX_MEMORY_BLOCK], access_offset[LITE_MAX_MEMORY_BLOCK], accumulate_length[LITE_MAX_MEMORY_BLOCK];
         int poll_status[LITE_MAX_MEMORY_BLOCK], connection_id_list[LITE_MAX_MEMORY_BLOCK];
 	unsigned long priority_jiffies;
-	
-        
+
+
         //memset(access_index, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	//memset(access_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	//memset(access_offset, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	//memset(accumulate_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
-	
+
 	//pte_t *pte = lite_get_pte(current->mm, (unsigned long)local_addr);
 	//struct page *page = pte_page(*pte);
 	//unsigned long phys_addr = page_to_phys(page) + (((uintptr_t)local_addr)&LITE_LINUX_PAGE_OFFSET);
@@ -608,7 +608,7 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
 	if(!(mr_ptr->permission & MR_WRITE_FLAG))
 		return MR_ASK_REFUSE;
 	if(mr_ptr->password != password)
-		return MR_ASK_REFUSE; 
+		return MR_ASK_REFUSE;
 	mr_addr_list = mr_ptr->datalist;
 	if(!mr_addr_list)
 		return MR_ASK_UNKNOWN;
@@ -624,14 +624,14 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
         }
         else
         {
-        	request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
+		request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
         }
         for(i = 0; i < request_length;i++)
         {
                 curr_index = access_index[i];
                 curr_length = access_length[i];
                 curr_offset = access_offset[i];
-                curr_accumulate = accumulate_length[i];	
+                curr_accumulate = accumulate_length[i];
                 mr_addr = mr_addr_list[curr_index];
                 poll_status[i] = SEND_REPLY_WAIT;
                 real_addr_list[i]=0;
@@ -644,7 +644,7 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
                         return -EFAULT;
                 }
                 target_node = mr_addr->node_id;
-                
+
                 if(target_node == ctx->node_id)//local access
                 {
                         void *real_addr;
@@ -661,7 +661,7 @@ int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr,
                 connection_id_list[i] = connection_id;
                 ret = lite_check_page_continuous(local_addr + curr_accumulate, curr_length, &phys_addr);
                 if(ret)//It's continuous
-                {	
+                {
                         real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
                         client_send_request(ctx, connection_id, M_WRITE, mr_addr, real_addr, curr_length, curr_offset, LITE_USERSPACE_FLAG, &poll_status[i]);
                 }
@@ -725,16 +725,16 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 	memset(access_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	memset(access_offset, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	memset(accumulate_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
-	
 
-	//test1 starts	
+
+	//test1 starts
 	mr_ptr = lmr_to_mr_metadata(lite_handler);
 	if(!mr_ptr)
 		return MR_ASK_REFUSE;
 	if(!(mr_ptr->permission & MR_READ_FLAG))
 		return MR_ASK_REFUSE;
 	if(mr_ptr->password != password)
-		return MR_ASK_REFUSE; 
+		return MR_ASK_REFUSE;
 	mr_addr_list = mr_ptr->datalist;
 	if(!mr_addr_list)
 		return MR_ASK_UNKNOWN;
@@ -742,17 +742,17 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 	if(priority)
 		liteapi_priority_handling(priority, PRIORITY_START, &priority_jiffies, PRIORITY_READ);
 	request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
-	for(i=0;i<request_length;i++)
-	{
+
+	for(i=0;i<request_length;i++) {
 		curr_index = access_index[i];
 		curr_length = access_length[i];
 		curr_offset = access_offset[i];
-		curr_accumulate = accumulate_length[i];	
+		curr_accumulate = accumulate_length[i];
 		mr_addr = mr_addr_list[curr_index];
                 poll_status[i] = SEND_REPLY_WAIT;
                 real_addr_list[i]=0;
                 connection_id_list[i] = -1;
-		
+
 		target_node = mr_addr->node_id;
 		if(target_node == ctx->node_id)//local access
 		{
@@ -765,10 +765,9 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 		}
 		connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
                 connection_id_list[i] = connection_id;
-		
 
 		if(lite_check_page_continuous(local_addr + curr_accumulate , curr_length, &phys_addr))//It's continuous
-		{	
+		{
 			real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
 			//printk(KERN_CRIT "%s: continuous %d\n", __func__, size);
 			client_send_request(ctx, connection_id, M_READ, mr_addr, real_addr, curr_length, curr_offset, LITE_USERSPACE_FLAG, &poll_status[i]);
@@ -779,6 +778,7 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 			client_send_request(ctx, connection_id, M_READ, mr_addr, real_addr_list[i], curr_length, curr_offset, LITE_KERNELSPACE_FLAG, &poll_status[i]);
 		}
 	}
+
 	for(i = 0; i < request_length;i++)
         {
                 if(connection_id_list[i]<0)//local access
@@ -786,7 +786,7 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 		curr_index = access_index[i];
 		curr_length = access_length[i];
 		curr_offset = access_offset[i];
-		curr_accumulate = accumulate_length[i];	
+		curr_accumulate = accumulate_length[i];
 		mr_addr = mr_addr_list[curr_index];
                 client_internal_poll_sendcq(ctx->send_cq[connection_id_list[i]], connection_id_list[i], &poll_status[i]);
                 if(real_addr_list[i])
@@ -849,7 +849,7 @@ EXPORT_SYMBOL(liteapi_register_application);
 /**
  * liteapi_unregister_application - remove the registration of the specific application
  * @designed_port: targetted port
- * This function will support password in the future version. 
+ * This function will support password in the future version.
  * This function is in beta version
  */
 int liteapi_unregister_application(unsigned int designed_port)
@@ -901,7 +901,7 @@ inline int liteapi_reply_message(void *addr, int size, uintptr_t descriptor)
 		getnstimeofday(&ts);
 	#endif
 	ret = client_reply_message(ctx, addr, size, descriptor, 0, HIGH_PRIORITY);
-	#ifdef LITE_GET_TIME                                                                      
+	#ifdef LITE_GET_TIME
 		getnstimeofday(&te);
 		diff = timespec_sub(te,ts);
 		printk("[%s] time %lu\n", __func__, diff.tv_nsec);
@@ -1136,7 +1136,7 @@ int liteapi_rdma_read_offset(uint64_t lite_handler, void *local_addr, int size, 
 	if(!(mr_ptr->permission & MR_READ_FLAG))
 		return MR_ASK_REFUSE;
 	if(mr_ptr->password != password)
-		return MR_ASK_REFUSE; 
+		return MR_ASK_REFUSE;
 	mr_addr = mr_ptr->datalist[0];
 	if(!mr_addr)
 		return MR_ASK_UNKNOWN;
@@ -1248,7 +1248,7 @@ int liteapi_rdma_compare_and_swp(uint64_t lite_handler, void *local_addr, unsign
 	//mr_addr = client_id_to_mr(lite_handler);
 	//if(!mr_addr)
 	//	return 1;
-	
+
 	ltc *ctx = LITE_ctx;
 	struct hash_asyio_key *temp_ptr;
 	int connection_id;
@@ -1259,7 +1259,7 @@ int liteapi_rdma_compare_and_swp(uint64_t lite_handler, void *local_addr, unsign
 	target_node = temp_ptr->datalist[0]->node_id;
         if(target_node != ctx->node_id)
         {
-        	connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
+		connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
 	        ret = client_compare_swp(ctx, connection_id, temp_ptr->datalist[0], local_addr, guess_value, set_value);
         }
         else
@@ -1288,7 +1288,7 @@ int liteapi_rdma_fetch_and_add(uint64_t lite_handler, void *local_addr, unsigned
 	//mr_addr = client_id_to_mr(lite_handler);
 	//if(!mr_addr)
 	//	return 1;
-	
+
 	struct hash_asyio_key *temp_ptr;
 	int ret=0;
 	ltc *ctx = LITE_ctx;
@@ -1299,7 +1299,7 @@ int liteapi_rdma_fetch_and_add(uint64_t lite_handler, void *local_addr, unsigned
 	target_node = temp_ptr->datalist[0]->node_id;
         if(target_node != ctx->node_id)
         {
-        	connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
+		connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
 	        client_fetch_and_add(ctx, connection_id, temp_ptr->datalist[0], local_addr, input_value);
         }
 	else
@@ -1332,7 +1332,7 @@ EXPORT_SYMBOL(liteapi_send_message);
 
 int liteapi_send_message_priority(int target_node, void *addr, int size, int priority)
 {
-	
+
 	ltc *ctx = LITE_ctx;
 	uintptr_t tempaddr;
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, size);
@@ -1394,7 +1394,7 @@ int liteapi_send_reply_type(int target_node, char *msg, int size, char *output_m
 }
 
 int liteapi_send_reply_UD(int target_node, char *msg, int size, char *output_msg)
-{	
+{
 	int priority = LOW_PRIORITY;
 	int wait_send_reply_id = SEND_REPLY_WAIT;
 	unsigned long j0,j1,delay;
@@ -1405,13 +1405,13 @@ int liteapi_send_reply_UD(int target_node, char *msg, int size, char *output_msg
 retran:
 	//client_send_message_addr(connection_id, MSG_CLIENT_SEND, (void *)tempaddr, size, 0);
 	client_send_message_sge_UD(ctx, target_node, MSG_GET_SEND_AND_REPLY_1_UD, (void *)tempaddr, size, (uint64_t)output_msg, (uint64_t)&wait_send_reply_id, priority);
-	j0 = jiffies; 
-	j1 = j0 + delay; 
+	j0 = jiffies;
+	j1 = j0 + delay;
 	while(wait_send_reply_id==SEND_REPLY_WAIT&&time_before(jiffies, j1))
 		cpu_relax();
 	if(wait_send_reply_id==SEND_REPLY_WAIT)
 		goto retran;
-		
+
 
 	return wait_send_reply_id;
 }
@@ -1449,17 +1449,17 @@ uint64_t liteapi_dist_barrier(unsigned int check_num)
 		tempaddr = client_ib_reg_mr_addr(ctx, &source, sizeof(int));
 barrier_resend:
 		client_send_message_sge_UD(ctx, i, MSG_DIST_BARRIER, (void *)tempaddr, sizeof(int), (uint64_t)&output, (uint64_t)&wait_send_reply_id, priority);
-                j0 = jiffies; 
+                j0 = jiffies;
                 j1 = j0 + delay;
 	        while(wait_send_reply_id==SEND_REPLY_WAIT&&(time_before(jiffies, j1)))
-        		cpu_relax();
+			cpu_relax();
                 if(wait_send_reply_id == SEND_REPLY_WAIT)
                 {
                         printk(KERN_CRIT "%s: lost packet after 1000 msecs\n", __func__);
                         goto barrier_resend;
                 }
 	}
-	#ifdef LITE_GET_TIME                                                                      
+	#ifdef LITE_GET_TIME
 		getnstimeofday(&te);
 		diff = timespec_sub(te,ts);
 		printk("[%s] time-after send %lu\n", __func__, diff.tv_nsec);
@@ -1470,7 +1470,7 @@ barrier_resend:
 		schedule();
 	}
 	atomic_sub(check_num, &ctx->dist_barrier_counter);
-	#ifdef LITE_GET_TIME                                                                      
+	#ifdef LITE_GET_TIME
 		getnstimeofday(&te);
 		diff = timespec_sub(te,ts);
 		printk("[%s] time-after receive %lu\n", __func__, diff.tv_nsec);
@@ -1497,7 +1497,7 @@ EXPORT_SYMBOL(liteapi_send_reply_opt);
 
 
 uint64_t liteapi_register_lmr_with_virt_addr(void *addr, int size, bool atomic_flag, int password)
-{	
+{
 	uint64_t ret_key;
 	int roundup_size = ROUND_UP(size, REMOTE_MEMORY_PAGE_SIZE);
 	ltc *ctx = LITE_ctx;
@@ -1520,11 +1520,11 @@ uint64_t liteapi_register_lmr_with_virt_addr(void *addr, int size, bool atomic_f
 		return MR_ASK_REFUSE;
 	}
 	else
-	{	
+	{
 		printk(KERN_CRIT "should not be here\n");
 		return MR_ASK_REFUSE;
 	}
-	ret_mr_list[0] = ret_mr;	
+	ret_mr_list[0] = ret_mr;
 	ret_key = atomic_add_return(1, &ctx->lmr_inc);
 	if(atomic_flag)
 		client_create_metadata_by_lmr(ctx, ret_key, ret_mr_list, 1, ret_mr->node_id, roundup_size, (MR_READ_FLAG | MR_WRITE_FLAG | MR_SHARE_FLAG | MR_ADMIN_FLAG | MR_ATOMIC_FLAG), 1, password);
@@ -1557,7 +1557,7 @@ uint64_t liteapi_wrapup_alloc_for_remote_access(void *data, unsigned int size, u
 	int remaining_size;
 	int request_size;
 	int accumulate_size;
-	
+
 	roundup_size = ROUND_UP(size, REMOTE_MEMORY_PAGE_SIZE);
 	required_mr_num = ROUND_UP(roundup_size, LITE_MEMORY_BLOCK) / LITE_MEMORY_BLOCK;
         if(required_mr_num > LITE_MAX_MEMORY_BLOCK)
@@ -1574,7 +1574,7 @@ uint64_t liteapi_wrapup_alloc_for_remote_access(void *data, unsigned int size, u
 		request_size = MIN(remaining_size, LITE_MEMORY_BLOCK);
 		addr = client_alloc_memory_for_mr(request_size*sizeof(char));
 		memset(addr, 0, request_size);
-		ret_mr = client_ib_reg_mr(ctx, addr, request_size, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);	
+		ret_mr = client_ib_reg_mr(ctx, addr, request_size, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 		ret_mr_list[i] = ret_mr;
 		ret = copy_from_user(addr, data + accumulate_size, request_size);
 		accumulate_size = accumulate_size + request_size;
@@ -1582,13 +1582,13 @@ uint64_t liteapi_wrapup_alloc_for_remote_access(void *data, unsigned int size, u
 		//if(size > 1024*1024*4)
 		//	printk(KERN_CRIT "%s: required_mr %d, size %d r-size %d, a-size %d request %d remain %d\n", __func__, required_mr_num, size, roundup_size, accumulate_size,  request_size, remaining_size);
 		if(ret)
-			return -EFAULT;	
+			return -EFAULT;
 	}
 	tmp_lmr = atomic_add_return(1, &ctx->lmr_inc);
 	client_create_metadata_by_lmr(ctx, tmp_lmr, ret_mr_list, required_mr_num, ctx->node_id, roundup_size, (MR_READ_FLAG | MR_WRITE_FLAG | MR_SHARE_FLAG | MR_ADMIN_FLAG), 0, password);
 	liteapi_add_askmr_table(identifier, tmp_lmr, MR_READ_FLAG | MR_WRITE_FLAG | MR_SHARE_FLAG, password);
 	kfree(ret_mr_list);
-	
+
 	return tmp_lmr;
 }
 EXPORT_SYMBOL(liteapi_wrapup_alloc_for_remote_access);
@@ -1623,7 +1623,7 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 	{
 		printk(KERN_CRIT "atomic operation can only be assigned with 8 bytes instead of %d\n", size);
 		return MR_ASK_REFUSE;
-	}	
+	}
 
         if(target_node == 0) {
                 round_robin_list = kmalloc(sizeof(int)*total_node-1, GFP_KERNEL);
@@ -1661,7 +1661,7 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			while(wait_send_reply_id==SEND_REPLY_WAIT)
 				cpu_relax();
 			ret_mr_list[i] = ret_mr;
-			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 
+			remaining_size = remaining_size - LITE_MEMORY_BLOCK;
 		}
                 kfree(round_robin_list);
         }
@@ -1707,7 +1707,7 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 			}
 
 			ret_mr_list[i] = ret_mr;
-			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 
+			remaining_size = remaining_size - LITE_MEMORY_BLOCK;
 		}
 	} else {
 		/* Local Allocation */
@@ -1722,9 +1722,9 @@ uint64_t liteapi_alloc_remote_mem(unsigned int target_node, unsigned int size, u
 				ret_mr = client_ib_reg_mr(ctx, addr, request_size, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
 			}
 			else
-				ret_mr = client_ib_reg_mr(ctx, addr, request_size, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);	
+				ret_mr = client_ib_reg_mr(ctx, addr, request_size, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 			ret_mr_list[i] = ret_mr;
-			remaining_size = remaining_size - LITE_MEMORY_BLOCK; 
+			remaining_size = remaining_size - LITE_MEMORY_BLOCK;
 		}
 	}
 
@@ -1747,7 +1747,7 @@ EXPORT_SYMBOL(liteapi_alloc_remote_mem);
  * @requery_flag: if the metadata is already in local cache, query again?
  */
 inline int liteapi_query_port(int target_node, int designed_port, int requery_flag)
-{	
+{
 	ltc *ctx = LITE_ctx;
 	return client_query_port(ctx, target_node, designed_port, requery_flag);
 }
@@ -1766,7 +1766,7 @@ uint64_t liteapi_deregister_mr(uint64_t lmr)
 	int *target_array=kmalloc(sizeof(int)*max_number_of_target, GFP_KERNEL);
 	struct atomic_struct *temp_ato = kmalloc(sizeof(struct atomic_struct)*max_number_of_target, GFP_KERNEL);
 	struct max_reply_msg *reply = kmalloc(sizeof(struct max_reply_msg)*max_number_of_target, GFP_KERNEL);
-	struct mr_request_form ret_form; 
+	struct mr_request_form ret_form;
 
 
 	mr_ptr = lmr_to_mr_metadata(lmr);
@@ -1778,7 +1778,7 @@ uint64_t liteapi_deregister_mr(uint64_t lmr)
 	if(!mr_addr)
 		return MR_ASK_UNKNOWN;
 
-	
+
 	/*for(i=find_next_bit(mr_ptr->askmr_bitmap, MAX_NODE, 0);i<MAX_NODE;)
 	{
 		memset(&ret_form, 0, sizeof(struct mr_request_form));
@@ -1788,14 +1788,14 @@ uint64_t liteapi_deregister_mr(uint64_t lmr)
 		liteapi_send_reply_type(i, (char *)&ret_form, sizeof(struct mr_request_form), (char *)&ret, MSG_MR_REQUEST);
 		clear_bit(i, mr_ptr->askmr_bitmap);
 		i=find_next_bit(mr_ptr->askmr_bitmap, MAX_NODE, i);
-	}*/			
+	}*/
 	for(i=find_next_bit(mr_ptr->askmr_bitmap, MAX_NODE, 0);i<MAX_NODE;)
 	{
 		target_array[real_number_of_target]=i;
 		clear_bit(i, mr_ptr->askmr_bitmap);
 		real_number_of_target++;
 		i=find_next_bit(mr_ptr->askmr_bitmap, MAX_NODE, i);
-	}		
+	}
 	memset(&ret_form, 0, sizeof(struct mr_request_form));
 	memcpy(&ret_form.request_mr, mr_addr, sizeof(struct lmr_info));
 	ret_form.op_code = OP_REMOTE_DEREGISTER;
@@ -1803,8 +1803,8 @@ uint64_t liteapi_deregister_mr(uint64_t lmr)
 	{
 		temp_ato[i].vaddr=&ret_form;
 		temp_ato[i].len=sizeof(struct mr_request_form);
-	}	
-	
+	}
+
 	//liteapi_multi_send_reply_type(real_number_of_target, target_array, temp_ato, reply, MSG_MR_REQUEST);
 	//It was liteapi_multi_send_reply
 	for(i=0;i<real_number_of_target;i++)
@@ -1827,7 +1827,7 @@ int liteapi_umap_lmr(uint64_t lmr)
         return 0;
 	entry = lmr_to_mr_metadata(lmr);
 	if(!entry)
-		return MR_ASK_UNKNOWN; 
+		return MR_ASK_UNKNOWN;
 	//spin_lock(&(ASYIO_HASHTABLE_LOCK[entry->hash_key]));
 	spin_lock(&umap_lmr_lock);
 	hash_del(&entry->hlist);
@@ -1847,19 +1847,19 @@ EXPORT_SYMBOL(liteapi_umap_lmr);
  * @password: the pin code for accessing this LMR (if request is granted)
  */
 uint64_t liteapi_ask_mr(int memory_space_owner_node, uint64_t identifier, uint64_t permission, int password) //This api need to be re-implemented, especially in the receiving side (poll-cq) for the asyIO record
-{	
+{
 	struct ask_mr_form input_mr_form;
 	uintptr_t tempaddr;
 	int priority = LOW_PRIORITY;
 	int wait_send_reply_id;
-	
+
 	ltc *ctx = LITE_ctx;
 
 	struct ask_mr_reply_form reply_mr_form;
 
 	input_mr_form.identifier = identifier;
 	input_mr_form.permission = permission;
-	
+
 	wait_send_reply_id = SEND_REPLY_WAIT;
 
 	if(memory_space_owner_node!=ctx->node_id)//remote request
@@ -1888,7 +1888,7 @@ uint64_t liteapi_ask_mr(int memory_space_owner_node, uint64_t identifier, uint64
 			ret_mr_list[i]=ret_mr;
 		}
 		ret_key = atomic_add_return(1, &ctx->lmr_inc);
-		
+
 		ret = client_create_metadata_by_lmr(ctx, ret_key, ret_mr_list, reply_mr_form.list_length, reply_mr_form.node_id, reply_mr_form.total_length, reply_mr_form.permission, 0, password);
 		kfree(ret_mr_list);
 		return ret_key;
@@ -1917,8 +1917,8 @@ int liteapi_create_lock(int target_node, void *output_lock)
 		printk(KERN_CRIT "%s:[error] server can't process this request: %d\n", __func__, target_node);
 		return 1;
 	}
-	wait_send_reply_id = SEND_REPLY_WAIT;	
-	
+	wait_send_reply_id = SEND_REPLY_WAIT;
+
 	if(target_node!=ctx->node_id)
 	{
 		tempaddr = client_ib_reg_mr_addr(ctx, msg, 8);
@@ -1928,7 +1928,7 @@ int liteapi_create_lock(int target_node, void *output_lock)
 	{
 		client_send_message_local(ctx, target_node, MSG_CREATE_LOCK, (void *)msg, 8, (uint64_t)output_lock, (uint64_t)&wait_send_reply_id, KEY_PRIORITY);
 	}
-	
+
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		cpu_relax();
 	return tmp->lock_num;
@@ -2008,13 +2008,13 @@ int liteapi_lock(void *input_void_key)
 			struct lite_lock_reserve_form reserve_form;
 			int ret_num;
 			//printk(KERN_CRIT "%s: tic-%llu send to lock\n", __func__, input_key->ticket_num);
-			
+
 			reserve_form.lock_num = input_key->lock_num;
 			reserve_form.ticket_num = input_key->ticket_num;
-			
+
 			wait_send_reply_id = SEND_REPLY_WAIT;
 			tempaddr = client_ib_reg_mr_addr(ctx, &reserve_form, sizeof(struct lite_lock_reserve_form));
-			client_send_message_sge_UD(ctx, input_key->lock_mr.node_id, MSG_RESERVE_LOCK, (void *)tempaddr, sizeof(struct lite_lock_reserve_form), (uint64_t)&ret_num, (uint64_t)&wait_send_reply_id, KEY_PRIORITY);	
+			client_send_message_sge_UD(ctx, input_key->lock_mr.node_id, MSG_RESERVE_LOCK, (void *)tempaddr, sizeof(struct lite_lock_reserve_form), (uint64_t)&ret_num, (uint64_t)&wait_send_reply_id, KEY_PRIORITY);
 			while(wait_send_reply_id==SEND_REPLY_WAIT)
 				schedule();
 			//printk(KERN_CRIT "%s: tic-%llu get lock after retry\n", __func__, input_key->ticket_num);
@@ -2034,12 +2034,12 @@ int liteapi_lock(void *input_void_key)
 			struct lite_lock_reserve_form reserve_form;
 			int ret_num;
 			//printk(KERN_CRIT "%s: tic-%llu send to lock\n", __func__, input_key->ticket_num);
-			
+
 			reserve_form.lock_num = input_key->lock_num;
 			reserve_form.ticket_num = input_key->ticket_num;
-			
+
 			wait_send_reply_id = SEND_REPLY_WAIT;
-			client_send_message_local(ctx, input_key->lock_mr.node_id, MSG_RESERVE_LOCK, (void *)&reserve_form, sizeof(struct lite_lock_reserve_form), (uint64_t)&ret_num, (uint64_t)&wait_send_reply_id, KEY_PRIORITY);	
+			client_send_message_local(ctx, input_key->lock_mr.node_id, MSG_RESERVE_LOCK, (void *)&reserve_form, sizeof(struct lite_lock_reserve_form), (uint64_t)&ret_num, (uint64_t)&wait_send_reply_id, KEY_PRIORITY);
 			while(wait_send_reply_id==SEND_REPLY_WAIT)
 				schedule();
 		}
@@ -2089,10 +2089,10 @@ int liteapi_unlock(void *input_void_key)
 		//If this request is in local, the case that this function is returned before the waiting_schedule doesn't read the data
 		uintptr_t tempaddr;
 		struct lite_lock_reserve_form *reserve_form = kmalloc(sizeof(struct lite_lock_reserve_form), GFP_KERNEL);
-		
+
 		reserve_form->lock_num = input_key->lock_num;
 		reserve_form->ticket_num = input_key->ticket_num;
-		
+
 		if(!local_flag)
 		{
 			tempaddr = client_ib_reg_mr_addr(ctx, reserve_form, sizeof(struct lite_lock_reserve_form));
@@ -2100,7 +2100,7 @@ int liteapi_unlock(void *input_void_key)
 			kfree(reserve_form);
 		}
 		else
-			client_send_message_local(ctx, input_key->lock_mr.node_id, MSG_UNLOCK, reserve_form, sizeof(struct lite_lock_reserve_form), 0, 0, KEY_PRIORITY);	
+			client_send_message_local(ctx, input_key->lock_mr.node_id, MSG_UNLOCK, reserve_form, sizeof(struct lite_lock_reserve_form), 0, 0, KEY_PRIORITY);
 		//printk(KERN_CRIT "%s: release lock through message ticket-%llu ret-%llu\n", __func__, input_key->ticket_num, ret);
 	}
 	input_key->ticket_num = 0;
@@ -2179,7 +2179,7 @@ EXPORT_SYMBOL(liteapi_reg_ask_mr_handler);
 int liteapi_num_connected_nodes(void)
 {
 	if(!LITE_ctx)
-	{	
+	{
 		printk(KERN_CRIT "%s: using LITE ctx directly since ctx is NULL\n", __func__);
 		return atomic_read(&LITE_ctx->num_alive_nodes);
 	}
@@ -2248,21 +2248,21 @@ EXPORT_SYMBOL(liteapi_alloc_continuous_memory);
 int liteapi_establish_conn(char *servername, int eth_port, int ib_port)
 {
 	ltc *ctx;
-	
+
 	printk(KERN_CRIT "Start calling rc_internal to create LITE based on %p\n", liteapi_dev);
 	printk(KERN_CRIT "Server:%s eth port:%d ib port:%d\n", servername, eth_port, ib_port);
-	
+
 	ctx = client_establish_conn(liteapi_dev, servername, eth_port, ib_port);
-	
+
 	if(!ctx)
 	{
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;	
+		return 0;
 	}
 
 	spin_lock_init(&umap_lmr_lock);
 	LITE_ctx = ctx;
-	
+
 	ctx->send_handler = handle_send;
 	ctx->send_reply_handler = handle_send_reply;
 	ctx->atomic_send_handler = handle_atomic_send;
@@ -2311,28 +2311,28 @@ static int __init ibv_init_module(void)
 
 	atomic_set(&global_reqid, 0);
 	//liteapi_establish_conn("wuklab13", 1, 10);
-	
+
 	//register syscall
-	
+
 	import_lite_hooks.lite_alloc_remote = liteapi_alloc_remote_mem;
 	import_lite_hooks.lite_remote_memset = liteapi_remote_memset;
 	import_lite_hooks.lite_fetch_add = liteapi_rdma_fetch_and_add;
-	
+
 	//import_lite_hooks.lite_rdma_synwrite = liteapi_rdma_synwrite_offset;
 	//import_lite_hooks.lite_rdma_read = liteapi_rdma_asyread_offset;
 	import_lite_hooks.lite_rdma_synwrite = liteapi_rdma_write_offset_userspace;
 	import_lite_hooks.lite_rdma_read = liteapi_rdma_read_offset_userspace;
-	
+
 	import_lite_hooks.lite_rdma_asywrite = liteapi_rdma_asywrite_offset;
 	import_lite_hooks.lite_ask_lmr = liteapi_ask_mr;
 	import_lite_hooks.lite_dist_barrier = liteapi_dist_barrier;
 	import_lite_hooks.lite_add_ask_mr_table = liteapi_add_askmr_table;
 	import_lite_hooks.lite_compare_swp = liteapi_rdma_compare_and_swp;
 	import_lite_hooks.lite_umap_lmr = liteapi_umap_lmr;
-	
+
 	import_lite_hooks.lite_register_application = liteapi_register_application;
 	import_lite_hooks.lite_unregister_application = liteapi_unregister_application;
-	
+
 	import_lite_hooks.lite_receive_message = liteapi_receive_message_userspace;
 	import_lite_hooks.lite_send_reply_imm = liteapi_send_reply_imm_userspace;
 	import_lite_hooks.lite_reply_message = liteapi_reply_message_userspace;
@@ -2366,4 +2366,3 @@ static void __exit ibv_cleanup_module(void)
 
 module_init(ibv_init_module);
 module_exit(ibv_cleanup_module);
-

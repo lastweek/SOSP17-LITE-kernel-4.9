@@ -1,4 +1,4 @@
-This is LITE module. More details are in /README.md  
+This is LITE module. More details are in /README.md
 For userspace example, please check `lite-userspace/` for more details.
 
 *current limitation*

@@ -168,14 +168,14 @@ void poll_cq(struct ib_cq *cq, void *cq_context)
                 ctx = Connected_Ctx[j];
                 if(ctx)
                 {
-                	i = client_find_cq(ctx, cq);
+			i = client_find_cq(ctx, cq);
 	                if(i!=-1)
-                	{
-                		atomic_inc(&ctx->cq_block[i]);
-                	        wake_up_interruptible(&ctx->cq_block_queue[i]);
+			{
+				atomic_inc(&ctx->cq_block[i]);
+			        wake_up_interruptible(&ctx->cq_block_queue[i]);
 				//printk(KERN_ALERT "%s wakeup %d %p\n", __func__, i, cq);
-                		return;
-                	}
+				return;
+			}
                 }
         }
 	printk(KERN_ALERT "%s Error: Could not find cq in event caller as CQ: %p\n", __func__, cq);
@@ -225,7 +225,7 @@ int lite_check_page_continuous(void *local_addr, int size, unsigned long *answer
 	void *test_addr;
 	//if(size > 4096*4)
 	//	return 0;
-	
+
 	pte = lite_get_pte(current->mm, (unsigned long)local_addr);
 	if(!pte)
 		return 0;
@@ -284,9 +284,9 @@ int client_connect_loopback(struct ib_qp *src_qp, int port, int my_psn, enum ib_
 		memcpy(&attr.ah_attr.grh.dgid, &dest->gid, sizeof(union ib_gid));
                 attr.ah_attr.grh.sgid_index = SGID_INDEX;
 	}
-        
+
 	printk(KERN_CRIT "%s: lid-%d qpn-%d psn-%d\n", __func__, dest->lid, dest->qpn, dest->psn);
-	if(ib_modify_qp(src_qp, &attr, 
+	if(ib_modify_qp(src_qp, &attr,
 				IB_QP_STATE	|
 				IB_QP_AV	|
 				IB_QP_PATH_MTU	|
@@ -344,7 +344,7 @@ int client_setup_loopback_connections(ltc *ctx, int size, int rx_depth, int port
 		printk(KERN_ALERT "%s: Fail to create lookback_cq\n", __func__);
 		return -1;
 	}
-	
+
 	{
 		struct ib_qp_attr attr;
                 struct ib_qp_attr attr1;
@@ -498,7 +498,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	ctx->num_parallel_connection = NUM_PARALLEL_CONNECTION;
 	ctx->context = (struct ib_context *)ib_dev;
 
-	
+
 	if(!ctx->context)
 	{
 		printk(KERN_ALERT "Fail to initialize device / ctx->context\n");
@@ -535,7 +535,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 #endif
 	lite_dp("ctx->proc->lkey: %#x", ctx->proc->lkey);
 
-	ctx->send_state = kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
+	ctx->send_state = kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);
 	ctx->recv_state = kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
 
 	if (SGID_INDEX != -1) {
@@ -618,7 +618,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		atomic_set(&ctx->connection_congestion_status[i], CONGESTION_FREE);
 	ctx->connection_timer_start = (ktime_t *)kmalloc(num_connections * sizeof(ktime_t), GFP_KERNEL);
 	ctx->connection_timer_end = (ktime_t *)kmalloc(num_connections * sizeof(ktime_t), GFP_KERNEL);
-	
+
 	ctx->connection_count = (atomic_t *)kmalloc(num_connections * sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<num_connections;i++)
 	{
@@ -651,7 +651,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	//INIT_LIST_HEAD(&ctx->asy_fence_list_ms);
 
 	//barrier setup
-	
+
 	atomic_set(&ctx->dist_barrier_counter, 0);
         ctx->dist_barrier_idx = 0;
         for(i=0;i<MAX_NODE;i++)
@@ -661,7 +661,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	atomic_set(&ctx->lmr_inc, 1024);
 
 	//UD connection setup
-	
+
 	ctx->recv_numUD = 0;
 	spin_lock_init(&ctx->connection_lockUD);
 	ctx->ah = (struct ib_ah **)kmalloc(MAX_NODE * sizeof(struct ib_ah*), GFP_KERNEL);
@@ -755,10 +755,10 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 			return NULL;
 		}
 	}
-	
+
 	//Finish UD
 	//
-	
+
 	ctx->qp = (struct ib_qp **)kmalloc(num_connections * sizeof(struct ib_qp *), GFP_KERNEL);
 	if(!ctx->qp)
 	{
@@ -777,7 +777,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
-                #ifdef SHARE_POLL_CQ_MODEL 
+                #ifdef SHARE_POLL_CQ_MODEL
 		ctx->send_cq[i] = ctx->send_cq[0];
                 #endif
                 #ifdef NON_SHARE_POLL_CQ_MODEL
@@ -795,13 +795,13 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		//init_attr.recv_cq = ctx->cq;
 		init_attr.recv_cq = ctx->cq[i%NUM_POLLING_THREADS];
 		init_attr.cap.max_send_wr = rx_depth + 2;
-        	//init_attr.cap.max_send_wr = 12000;
+		//init_attr.cap.max_send_wr = 12000;
 	        init_attr.cap.max_recv_wr = rx_depth;
 		init_attr.qp_type = IB_QPT_RC;
 		init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;
 
-        	init_attr.cap.max_send_sge = LITE_MAX_RC_SGE;
-        	init_attr.cap.max_recv_sge = LITE_MAX_RC_SGE;
+		init_attr.cap.max_send_sge = LITE_MAX_RC_SGE;
+		init_attr.cap.max_recv_sge = LITE_MAX_RC_SGE;
 
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if (IS_ERR_OR_NULL(ctx->qp[i])) {
@@ -822,7 +822,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
                 attr1.path_mtu = LITE_MTU;
                 attr1.retry_cnt = 7;
                 attr1.rnr_retry = 7;
-                
+
 		if(ib_modify_qp(ctx->qp[i], &attr1,
 					IB_QP_STATE		|
 					IB_QP_PKEY_INDEX	|
@@ -842,7 +842,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
         ctx->imm_store_semaphore_lock = kmalloc(sizeof(spinlock_t)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
         for(i=0;i<IMM_NUM_OF_SEMAPHORE;i++)
         {
-        	spin_lock_init(&ctx->imm_store_semaphore_lock[i]);
+		spin_lock_init(&ctx->imm_store_semaphore_lock[i]);
                 ctx->imm_store_semaphore[i] = NULL;
         }
 
@@ -857,26 +857,26 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		spin_lock_init(&ctx->imm_waitqueue_perport_lock[i]);
 		//atomic_set(&ctx->imm_perport_reg_num[i], -1);
 		ctx->imm_perport_reg_num[i]=-1;
-		
+
                 INIT_LIST_HEAD(&(ctx->imm_wait_userspace_perport[i].list));
 	}
-	
+
 	ctx->imm_store_block_queue = (wait_queue_head_t*)kmalloc((IMM_NUM_OF_SEMAPHORE)*sizeof(wait_queue_head_t), GFP_KERNEL);
 	for(i=0;i<IMM_NUM_OF_SEMAPHORE;i++)
 	        init_waitqueue_head(&ctx->imm_store_block_queue[i]);
 	ctx->imm_store_semaphore_task = (struct task_struct **)kzalloc(sizeof(struct task_struct*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
-	
+
 	//Lock related
 	atomic_set(&ctx->lock_num, 0);
 	ctx->lock_data = kzalloc(sizeof(struct lite_lock_form)*LITE_MAX_LOCK_NUM, GFP_KERNEL);
-	
+
 	//memory related
 	atomic_set(&ctx->current_alloc_size, 0);
-	
+
 	//server_setup_loopback_connections(ib_dev, size, rx_depth, ib_port);
 	//printk(KERN_ALERT "I am here for client_init_ctx\n");
 	//
-        
+
         //priority related
         atomic_set(&ctx->high_cur_num_write, 0);
         atomic_set(&ctx->low_cur_num_write, 0);
@@ -889,7 +889,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
         atomic_set(&ctx->low_total_num_sr, 0);
 	atomic_set(&ctx->slow_counter, 0);
 	init_waitqueue_head(&ctx->priority_block_queue);
-	
+
 	return ctx;
 }
 
@@ -902,7 +902,7 @@ ltc *client_init_interface(int ib_port, struct ib_device *ib_dev)
 {
 	int	size = 4096;
 	int	rx_depth = RECV_DEPTH;
-	int 	x;
+	int	x;
 	int	ret;
 	ltc *ctx;
 	mtu = LITE_MTU;
@@ -927,7 +927,7 @@ ltc *client_init_interface(int ib_port, struct ib_device *ib_dev)
 	}
 	//do loopback connection
 	client_setup_loopback_connections(ctx, 4096, rx_depth, ib_port);
-	
+
 	//test_printk(KERN_ALERT "I am here before return client_init_interface\n");
 	return ctx;
 
@@ -981,7 +981,7 @@ int client_gen_msg(ltc *ctx, char *msg, int connection_id)
 	my_dest.psn = client_get_random_number() & 0xffffff;
 	if(SGID_INDEX != -1)
 	{
-        	ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &my_dest.gid, NULL);
+		ib_query_gid((struct ib_device *)ctx->context, ctx->ib_port, SGID_INDEX, &my_dest.gid, NULL);
 	}
 	client_gid_to_wire_gid(&my_dest.gid, gid);
 	sprintf(msg, "%04x:%04x:%06x:%06x:%s", my_dest.node_id, my_dest.lid, my_dest.qpn,my_dest.psn, gid);
@@ -1003,7 +1003,7 @@ inline uintptr_t client_ib_reg_mr_addr(ltc *ctx, void *addr, size_t length)
 #else
 	u64 ret;
 
-	ret = ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
+	ret = ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL);
 
 #if 1
 	pr_info("%s(): (%s) kvaddr: %p pa: %#llx len:%zu dma_addr: %#llx\n",
@@ -1017,8 +1017,8 @@ EXPORT_SYMBOL(client_ib_reg_mr_addr);
 
 void client_ib_dereg_mr_addr(ltc *ctx, void *addr, size_t length)
 {
-	return ib_dma_unmap_single((struct ib_device *)ctx->context, (uint64_t)addr, length, DMA_BIDIRECTIONAL); 
-	//return (uintptr_t)ib_dma_unmap_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
+	return ib_dma_unmap_single((struct ib_device *)ctx->context, (uint64_t)addr, length, DMA_BIDIRECTIONAL);
+	//return (uintptr_t)ib_dma_unmap_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL);
 }
 
 uintptr_t client_ib_reg_mr_phys_addr(ltc *ctx, void *addr, size_t length)
@@ -1044,13 +1044,13 @@ struct lmr_info *client_ib_reg_mr(ltc *ctx, void *addr, size_t length, enum ib_a
 	//ret = (struct lmr_info *)kmem_cache_alloc(lmr_info_cache, GFP_KERNEL);
 	ret = client_alloc_lmr_info_buf();
 	//int connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
-	
+
 #ifdef PHYSICAL_ALLOCATION
 	ret->addr = (void *)client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
 #else
-	ret->addr = (void *)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
+	ret->addr = (void *)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL);
 #endif
-	
+
 	ret->length = length;
 	ret->lkey = proc->lkey;
 	ret->rkey = proc->rkey;
@@ -1138,8 +1138,8 @@ int client_post_receives_message_UD(ltc *ctx, int depth)
                         wr.sg_list = NULL;
                         wr.num_sge = 0;*/
 
-                        //start = ktime_get(); 
-                        
+                        //start = ktime_get();
+
 			ib_post_recv(ctx->qpUD, &wr, &bad_wr);
                         //if(ret)
                         //        printk(KERN_CRIT "error\n");
@@ -1147,7 +1147,7 @@ int client_post_receives_message_UD(ltc *ctx, int depth)
                         //client_internal_stat(client_get_time_difference(start, end), LITE_STAT_ADD);
 		}
                 //printk(KERN_CRIT "%s: LITE_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, LITE_STAT_CLEAR));
-	#ifdef LITE_GET_TIME                                                                      
+	#ifdef LITE_GET_TIME
 		getnstimeofday(&te);
 		diff = timespec_sub(te,ts);
 		printk("[%s] time %lu\n", __func__, diff.tv_nsec);
@@ -1213,7 +1213,7 @@ int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
 /**
  * client_ktcp_recv: kernel space tcp connection - recv - for cluster intialization
  */
-int client_ktcp_send(struct socket *sock,char *buf,int len) 
+int client_ktcp_send(struct socket *sock,char *buf,int len)
 {
 #if 0
 	struct msghdr msg;
@@ -1306,7 +1306,7 @@ int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum i
 	        attr.ah_attr.grh.sgid_index = SGID_INDEX;
 	}
 
-	if(ib_modify_qp(ctx->qp[connection_id], &attr, 
+	if(ib_modify_qp(ctx->qp[connection_id], &attr,
 				IB_QP_STATE	|
 				IB_QP_AV	|
 				IB_QP_PATH_MTU	|
@@ -1385,9 +1385,9 @@ int client_add_newnode(ltc *ctx, char *msg)
 	client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
 
 	atomic_inc(&ctx->num_alive_connection[rem_dest.node_id]);
-	
+
 	atomic_inc(&ctx->alive_connection);
-	up(&add_newnode_mutex);	
+	up(&add_newnode_mutex);
 	if(atomic_read(&ctx->num_alive_connection[rem_dest.node_id]) == NUM_PARALLEL_CONNECTION)
 	{
 		atomic_inc(&ctx->num_alive_nodes);
@@ -1397,7 +1397,7 @@ int client_add_newnode(ltc *ctx, char *msg)
 		//client_send_message_sge_UD(ctx, rem_dest.node_id, MSG_PASS_LOCAL_IMM, (void *)tempaddr, sizeof(struct lmr_info), 0, 0, LOW_PRIORITY);
 		//printk(KERN_CRIT "%s: complete %d connection %d\n", __func__, NUM_PARALLEL_CONNECTION, rem_dest.node_id);
 	}
-	
+
 	do_exit(0);
 }
 
@@ -1410,7 +1410,7 @@ int client_add_newnode(ltc *ctx, char *msg)
  * @permission: asked permission level
  */
 int client_check_askmr_table(ltc *ctx, struct ask_mr_form *ask_form, uint32_t source_id, uint64_t *litekey_addr, uint64_t *permission)
-{	
+{
 	int found = 0;
 	struct ask_mr_table *current_hash_ptr;
 	int bucket = ask_form->identifier%(1<<HASH_TABLE_SIZE_BIT);
@@ -1473,9 +1473,9 @@ int client_spawn_send_handler(struct thread_pass_struct *input)
  * @name_len: length of the name
  */
 int client_register_application(ltc *ctx, unsigned int designed_port, unsigned int max_size_per_message, unsigned int max_user_per_node, char *name, uint64_t name_len)
-{	
+{
 	//EREP
-	
+
 	struct app_reg_port *current_hash_ptr;
 	int found = 0;
 	int bucket;
@@ -1530,7 +1530,7 @@ int client_register_application(ltc *ctx, unsigned int designed_port, unsigned i
 	spin_lock(&(LOCAL_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
 	hash_add_rcu(LOCAL_MEMORYRING_PORT_HASHTABLE, &entry->hlist, bucket);
 	spin_unlock(&(LOCAL_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
-	
+
 	//register application with a ring for each node except 0
 	/*
 	//void *addr;
@@ -1560,8 +1560,8 @@ int client_register_application(ltc *ctx, unsigned int designed_port, unsigned i
 		spin_unlock(&(LOCAL_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
 		//printk(KERN_CRIT "%s: alloc %s on port %d with machines %d hk %llu rk %llu\n", __func__, entry->name, (int)entry->port, entry->node, entry->hash_key, entry->port_node_key);
 	}*/
-	
-	
+
+
 	return designed_port;
 }
 EXPORT_SYMBOL(client_register_application);
@@ -1573,7 +1573,7 @@ EXPORT_SYMBOL(client_register_application);
  * @designed_port: the targetted port
  */
 int client_unregister_application(ltc *ctx, unsigned int designed_port)
-{	
+{
 	return designed_port;
 }
 EXPORT_SYMBOL(client_unregister_application);
@@ -1591,7 +1591,7 @@ EXPORT_SYMBOL(client_unregister_application);
  */
 int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, void *ret_length, int userspace_flag, int block_call)
 {
-	//This ret_addr is 
+	//This ret_addr is
 	struct imm_message_metadata *tmp;
 	int get_size;
 	int offset;
@@ -1603,7 +1603,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	struct imm_header_from_cq_to_port *new_request;
 	struct imm_header_from_cq_to_port *new_tar;
         int i;
-	
+
 	struct app_reg_port *current_hash_ptr;
 	int found = 0;
 	int bucket;
@@ -1613,8 +1613,8 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	int ack_flag=0;
 
 	if(unlikely(ctx->imm_perport_reg_num[port]<0))//this port is either not opened or no one queried
-		return SEND_REPLY_PORT_NOT_OPENED;	
-                
+		return SEND_REPLY_PORT_NOT_OPENED;
+
 	spin_lock(&ctx->imm_perport_lock[port]);
 	/*wait_event_interruptible(wq, !list_empty(&(request_list.list)));*/
 	/*
@@ -1627,10 +1627,10 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
 	new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
 	//printk(KERN_CRIT "%s: get %p\n", __func__, new_request);
-	list_del(&new_request->list);	
+	list_del(&new_request->list);
 	spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
 	*/
-        
+
         //Generate descriptor for future reply message, this part takes around 40-60ns, sometimes 100ns
 	descriptor = (struct imm_message_metadata *)kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
 	if(unlikely(!descriptor))
@@ -1667,22 +1667,22 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                                         struct imm_header_from_cq_to_userspace *tmp = kmem_cache_alloc(imm_wait_userspace_buffer_cache, GFP_KERNEL);
                                         tmp->receive_size = receive_size;
                                         if(lite_check_page_continuous(ret_addr, receive_size, &phys_addr))//check send buffer continuous
-                        			tmp->ret_addr = (void *)phys_to_virt(phys_addr);
-                                        else    
+						tmp->ret_addr = (void *)phys_to_virt(phys_addr);
+                                        else
                                                 tmp->ret_addr = NULL;
 		                        if(lite_check_page_continuous(reply_descriptor, sizeof(struct imm_message_metadata *), &phys_addr))//check send buffer continuous
-                        			tmp->reply_descriptor = (void *)phys_to_virt(phys_addr);
+						tmp->reply_descriptor = (void *)phys_to_virt(phys_addr);
                                         else
                                                 tmp->reply_descriptor = NULL;
 		                        if(lite_check_page_continuous(ret_length, sizeof(int), &phys_addr))//check send buffer continuous
-                        			tmp->ret_length = (void *)phys_to_virt(phys_addr);
+						tmp->ret_length = (void *)phys_to_virt(phys_addr);
                                         else
                                                 tmp->ret_length = NULL;
                                         if(tmp->ret_addr && tmp->reply_descriptor && tmp->ret_length)
                                         {
                                                 list_add_tail(&(tmp->list), &ctx->imm_wait_userspace_perport[port].list);
                                                 spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
-                                        	spin_unlock(&ctx->imm_perport_lock[port]);
+						spin_unlock(&ctx->imm_perport_lock[port]);
                                                 return SEND_REPLY_WAIT;
                                         }
 				        kmem_cache_free(imm_wait_userspace_buffer_cache, tmp);
@@ -1711,20 +1711,20 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 		else
 		{
 			spin_unlock(&ctx->imm_perport_lock[port]);
-                	kmem_cache_free(imm_message_metadata_cache, descriptor);
+			kmem_cache_free(imm_message_metadata_cache, descriptor);
 			return 0;
 		}
 		/*if(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))
 		{
 			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
                         spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
-			list_del(&new_request->list);	
+			list_del(&new_request->list);
                         spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
 		}
 		else
 		{
 			spin_unlock(&ctx->imm_perport_lock[port]);
-                	kmem_cache_free(imm_message_metadata_cache, descriptor);
+			kmem_cache_free(imm_message_metadata_cache, descriptor);
 			return 0;
 		}*/
 	}
@@ -1741,18 +1741,18 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	if(!current_hash_ptr || current_hash_ptr->port_node_key != port_node_key)
         {
                 current_hash_ptr = NULL;
-        	bucket = port_node_key % (1<<HASH_TABLE_SIZE_BIT);
-        	rcu_read_lock();
-        	hash_for_each_possible_rcu(LOCAL_MEMORYRING_PORT_HASHTABLE, current_hash_ptr, hlist, bucket)
-        	{
-        		if(current_hash_ptr->port_node_key == port_node_key)
-        		{
-        			found = 1;
+		bucket = port_node_key % (1<<HASH_TABLE_SIZE_BIT);
+		rcu_read_lock();
+		hash_for_each_possible_rcu(LOCAL_MEMORYRING_PORT_HASHTABLE, current_hash_ptr, hlist, bucket)
+		{
+			if(current_hash_ptr->port_node_key == port_node_key)
+			{
+				found = 1;
                                 ctx->last_port_node_key_hash_ptr = current_hash_ptr;
-        			break;
-        		}
-        	}
-        	rcu_read_unlock();
+				break;
+			}
+		}
+		rcu_read_unlock();
         }
         else
         {
@@ -1788,7 +1788,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	//do data memcpy
 	//This part could be modified into shared memory to avoid one memcpy
 	//But in current design, this memcpy is unavoidable just like send-reply, either memcpy or copy_to_user
-        
+
 	//test10 start, memcpy takes 129ns for 4k 20ns for 8B
         //below copy function takes from 30 - 200ns
 	if(!userspace_flag)//kernel space, do memcpy directly
@@ -1803,10 +1803,10 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                 else
                 {
 		        ret = copy_to_user(ret_addr, ((void *)tmp) + sizeof(struct imm_message_metadata), get_size);
-        	        if(unlikely(ret))
+		        if(unlikely(ret))
                         {
 		                spin_unlock(&ctx->imm_perport_lock[port]);
-                		return SEND_REPLY_FAIL;
+				return SEND_REPLY_FAIL;
                         }
                 }
 	}
@@ -1816,7 +1816,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	//has to keep data in descriptor
         //these two memcpy (one for pointer, one for data) use 30ns, 100ns(few)
 	//test11 starts ends in later this function to test network stack (recording and acking) time which takes 42ns for 8 and 54ns for 4K
-	
+
         memcpy(descriptor, tmp, sizeof(struct imm_message_metadata));
 	if(!userspace_flag)//This part is going to record the pointer value of descriptor
         {
@@ -1831,7 +1831,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                 }
                 else
                 {
-        		ret = copy_to_user(reply_descriptor, &descriptor, sizeof(struct imm_message_metadata *));
+			ret = copy_to_user(reply_descriptor, &descriptor, sizeof(struct imm_message_metadata *));
                         if(ret)
                         {
 		                spin_unlock(&ctx->imm_perport_lock[port]);
@@ -1846,7 +1846,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
         }
         else
         {
-                //do ack based on the last_ack_index, submit a request to waiting_queue_handler	
+                //do ack based on the last_ack_index, submit a request to waiting_queue_handler
                 spin_lock(&current_hash_ptr->last_ack_index_lock);//Check takes around 30-40 ns
                 last_ack = current_hash_ptr->last_ack_index;
                 offset = offset + sizeof(struct imm_message_metadata) + get_size;
@@ -1859,7 +1859,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                 }
                 spin_unlock(&current_hash_ptr->last_ack_index_lock);
                 if(ack_flag)//Ack takes around 85 - 120 ns
-                {	
+                {
                         struct send_and_reply_format *pass;
                         pass = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
                         pass->msg = (char*)current_hash_ptr;
@@ -1874,12 +1874,12 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
         }
         //test11 ends
 	//test9 ends
-        
+
         //process send-only checking
         if(descriptor->store_addr == (uintptr_t)NULL)
         {
                 struct imm_message_metadata *null_descriptor = (struct imm_message_metadata *)IMM_SEND_ONLY_FLAG;
-                if(!userspace_flag) 
+                if(!userspace_flag)
                         *reply_descriptor = (uintptr_t)NULL;
                 else//This does the same thing which is done by copy_to_user
                 {
@@ -1920,7 +1920,7 @@ int client_reply_message(ltc *ctx, void *addr, int size, uintptr_t descriptor, i
 	unsigned long phys_addr;
 	void *real_addr;
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
-	//test12 start, ends in client_send_message_with_rdma_write_with_imm_request before post_send (55ns (4K), 56ns(8)) 
+	//test12 start, ends in client_send_message_with_rdma_write_with_imm_request before post_send (55ns (4K), 56ns(8))
         //printk(KERN_CRIT "%s: reply message to %d %d\n", __func__, tmp->source_node_id, tmp->store_semaphore);
         //
         if(tmp->source_node_id != ctx->node_id)//regular remote send-reply
@@ -2004,14 +2004,14 @@ EXPORT_SYMBOL(client_reply_message);
  * @requery_flag: if the metadata is already in local cache, query again?
  */
 int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_flag)
-{	
+{
 	//EREP
 	struct ask_mr_form input_mr_form;
 	uintptr_t tempaddr;
 	int priority = LOW_PRIORITY;
 	int wait_send_reply_id;
 	struct ask_mr_reply_form reply_mr_form;
-	
+
 
 	struct app_reg_port *entry;
 	int bucket;
@@ -2066,7 +2066,7 @@ int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_
 		memcpy(&entry->ring_mr, &reply_mr_form.reply_mr, sizeof(struct lmr_info));
 		entry->remote_imm_ring_index = 0;
 		spin_lock_init(&entry->remote_imm_offset_lock);
-		
+
 		spin_lock(&(REMOTE_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
 		hash_add_rcu(REMOTE_MEMORYRING_PORT_HASHTABLE, &entry->hlist, bucket);
 		spin_unlock(&(REMOTE_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
@@ -2308,7 +2308,7 @@ int waiting_queue_handler(ltc *ctx)
 					{
 						ret.op_code = MR_ASK_REFUSE;
 					}
-					
+
 
 					if(!local_flag)
 					{
@@ -2407,19 +2407,19 @@ int waiting_queue_handler(ltc *ctx)
 					addr = client_alloc_memory_for_mr(length*sizeof(char));
                                         if(addr)
                                         {
-        					ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
-        					tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
-        					client_send_message_sge_UD(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
+						ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+						tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
+						client_send_message_sge_UD(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
                                         }
                                         else
                                         {
-        					ret_mr = client_alloc_lmr_info_buf();
+						ret_mr = client_alloc_lmr_info_buf();
 	                                        ret_mr->length = 0;
-                                        	ret_mr->lkey = 0;
-                                        	ret_mr->rkey = 0;
-                                        	ret_mr->node_id = 0;
-        					tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
-        					client_send_message_sge_UD(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
+						ret_mr->lkey = 0;
+						ret_mr->rkey = 0;
+						ret_mr->node_id = 0;
+						tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
+						client_send_message_sge_UD(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
                                         }
 					//kmem_cache_free(post_receive_cache, new_request->msg);
 					client_free_lmr_info_buf(ret_mr);
@@ -2450,7 +2450,7 @@ int waiting_queue_handler(ltc *ctx)
 					break;
 				}
 			//EREP
-			
+
 			case MSG_QUERY_PORT_1:
 				{
 					uintptr_t tempaddr;
@@ -2460,14 +2460,14 @@ int waiting_queue_handler(ltc *ctx)
 					int found = 0;
 					int bucket;
 					uint64_t port_node_key;
-					
+
 					void *addr;
 					struct lmr_info *ret_mr=NULL;
 					struct app_reg_port *entry;
 
 					memset(&ret, 0, sizeof(struct ask_mr_reply_form));
 					input_form = (struct ask_mr_form *)new_request->msg;
-					
+
 					//port_node_key = (input_form->designed_port<<MAX_NODE_BIT) + new_request->src_id;
 					//printk(KERN_CRIT "%s: start searching from 0\n", __func__);
 					//Always search for 0. If 0 is existed, generate one ring for user
@@ -2499,17 +2499,17 @@ int waiting_queue_handler(ltc *ctx)
 						entry->last_ack_index = 0;
 						spin_lock_init(&entry->last_ack_index_lock);
 						memcpy(entry->name, current_hash_ptr->name, strlen(current_hash_ptr->name));
-						
+
 						addr = client_alloc_memory_for_mr(IMM_PORT_CACHE_SIZE);
 						entry->addr = addr;
-						
+
 						ret_mr = client_ib_reg_mr(ctx, addr, IMM_PORT_CACHE_SIZE, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 						memcpy(&entry->ring_mr, ret_mr, sizeof(struct lmr_info));
 
 						spin_lock(&(LOCAL_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
 						hash_add_rcu(LOCAL_MEMORYRING_PORT_HASHTABLE, &entry->hlist, bucket);
 						spin_unlock(&(LOCAL_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
-						
+
 						printk(KERN_CRIT "%s: from node %d get query port %d name %s\n", __func__, new_request->src_id, entry->port, entry->name);
 						ret.op_code = MR_ASK_SUCCESS;
 						memcpy(&ret.reply_mr, &entry->ring_mr, sizeof(struct lmr_info));
@@ -2517,7 +2517,7 @@ int waiting_queue_handler(ltc *ctx)
 					else
 					{
 						printk(KERN_CRIT "%s: from node %d fail to get query port %d\n", __func__, new_request->src_id, input_form->designed_port);
-						ret.op_code = MR_ASK_REFUSE; 
+						ret.op_code = MR_ASK_REFUSE;
 					}
 
 					//atomic_inc(&ctx->imm_perport_reg_num[input_form->designed_port]);
@@ -2601,9 +2601,9 @@ int waiting_queue_handler(ltc *ctx)
 						ret_mr = client_ib_reg_mr(ctx, addr, 8, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC);
 						memcpy(&ret_lock.lock_mr, ret_mr, sizeof(struct lmr_info));
 						ret_lock.lock_num = lock_num;
-						
+
 						memcpy(&ctx->lock_data[lock_num], &ret_lock, sizeof(struct lite_lock_form));
-						
+
 						if(!local_flag)
 						{
 							tempaddr = client_ib_reg_mr_addr(ctx, &ret_lock, sizeof(struct lite_lock_form));
@@ -2623,11 +2623,11 @@ int waiting_queue_handler(ltc *ctx)
 						ret_lock.lock_num = -1;
 						if(!local_flag)
                                                 {
-        						tempaddr = client_ib_reg_mr_addr(ctx, &ret_lock, sizeof(struct lite_lock_form));
-        						client_send_message_sge_UD(ctx, new_request->src_id, MSG_CREATE_LOCK_REPLY, (void *)tempaddr, sizeof(struct lite_lock_form), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
+							tempaddr = client_ib_reg_mr_addr(ctx, &ret_lock, sizeof(struct lite_lock_form));
+							client_send_message_sge_UD(ctx, new_request->src_id, MSG_CREATE_LOCK_REPLY, (void *)tempaddr, sizeof(struct lite_lock_form), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
                                                 }
                                                 else
-                                                {       
+                                                {
 							client_send_message_local_reply(ctx, new_request->src_id, MSG_CREATE_LOCK_REPLY, &ret_lock, sizeof(struct lite_lock_form), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
                                                 }
 					}
@@ -2687,9 +2687,9 @@ int waiting_queue_handler(ltc *ctx)
 					int bucket;
 					struct lite_lock_queue_element *new_lock_hash_ptr;
 					//printk(KERN_CRIT "%s: receive reservelock through message-%llu\n", __func__, tmp->ticket_num);
-					
-					
-					
+
+
+
 					bucket = tar_lock_index % (1<<HASH_TABLE_SIZE_BIT);
 					rcu_read_lock();
 					hash_for_each_possible_rcu(LOCK_QUEUE_HASHTABLE, current_lock_hash_ptr, hlist, bucket)
@@ -2733,7 +2733,7 @@ int waiting_queue_handler(ltc *ctx)
 					else
 					{
 						//struct lite_lock_queue_element *new_hash_ptr = kmalloc(sizeof(struct lite_lock_queue_element), GFP_KERNEL);
-						
+
 						new_lock_hash_ptr = (struct lite_lock_queue_element *)kmem_cache_alloc(lock_queue_element_buffer_cache, GFP_KERNEL);
 						new_lock_hash_ptr->store_addr = new_request->store_addr;
 						new_lock_hash_ptr->store_semaphore = new_request->store_semaphore;
@@ -2742,7 +2742,7 @@ int waiting_queue_handler(ltc *ctx)
 						new_lock_hash_ptr->lock_num = tar_lock;
 						new_lock_hash_ptr->state = WAIT_FOR_UNLOCK;
 						new_lock_hash_ptr->tar_lock_index = tar_lock_index;
-						
+
 						spin_lock(&(LOCK_QUEUE_HASHTABLE_LOCK[bucket]));
 						hash_add_rcu(LOCK_QUEUE_HASHTABLE, &new_lock_hash_ptr->hlist, bucket);
 						spin_unlock(&(LOCK_QUEUE_HASHTABLE_LOCK[bucket]));
@@ -2780,7 +2780,7 @@ int waiting_queue_handler(ltc *ctx)
 					}
 					rcu_read_unlock();
 					if(found)//If there is one hash entry, remove it
-					{	
+					{
 						//spin_lock(&(LOCK_QUEUE_HASHTABLE_LOCK[bucket]));
 						//hash_del_rcu(&current_lock_hash_ptr->hlist);
 						//spin_unlock(&(LOCK_QUEUE_HASHTABLE_LOCK[bucket]));
@@ -2791,7 +2791,7 @@ int waiting_queue_handler(ltc *ctx)
 							printk(KERN_CRIT "%s: free error at line %d\n", __func__, __LINE__);
 					}
 					found = 0;
-					
+
 					bucket = next_lock_index % (1<<HASH_TABLE_SIZE_BIT);
 					rcu_read_lock();
 					hash_for_each_possible_rcu(LOCK_QUEUE_HASHTABLE, next_lock_hash_ptr, hlist, bucket)
@@ -2835,10 +2835,10 @@ int waiting_queue_handler(ltc *ctx)
 					else
 					{
 						new_lock_hash_ptr = kmalloc(sizeof(struct lite_lock_queue_element), GFP_KERNEL);
-						
+
 						new_lock_hash_ptr->state = UNLOCK_ALREADY_ARRIVED;
 						new_lock_hash_ptr->tar_lock_index = next_lock_index;
-						
+
 						spin_lock(&(LOCK_QUEUE_HASHTABLE_LOCK[bucket]));
 						hash_add_rcu(LOCK_QUEUE_HASHTABLE, &new_lock_hash_ptr->hlist, bucket);
 						spin_unlock(&(LOCK_QUEUE_HASHTABLE_LOCK[bucket]));
@@ -2897,7 +2897,7 @@ int waiting_queue_handler(ltc *ctx)
 						void *real_addr;
 						real_addr = __va(tar_form->request_mr.addr);
 						target_node = tar_form->copyto_mr.node_id;
-						if(target_node != ctx->node_id)	
+						if(target_node != ctx->node_id)
 						{
 							connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
 							client_send_request(ctx, connection_id, M_WRITE, &tar_form->copyto_mr, real_addr+tar_form->offset, tar_form->size, tar_form->copyto_offset, LITE_KERNELSPACE_FLAG, 0);
@@ -2921,7 +2921,7 @@ int waiting_queue_handler(ltc *ctx)
 						//get the lmr metadata first
 						struct hash_mraddr_to_lmr_metadata *current_hash_ptr;
 						uint64_t input_key = (uint64_t)tar_form->request_mr.addr;
-						int i;						
+						int i;
 						rcu_read_lock();
 						hash_for_each_possible_rcu(MR_HASHTABLE, current_hash_ptr, hlist, input_key)
 						{
@@ -2961,7 +2961,7 @@ int waiting_queue_handler(ltc *ctx)
 						client_free_recv_buf(new_request->msg);
 					}
 					else
-					{	
+					{
 						client_send_message_local_reply(ctx, new_request->src_id, MSG_GET_SEND_AND_REPLY_2, &ret, sizeof(uint64_t), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
 					}
 
@@ -3010,7 +3010,7 @@ int client_asy_latest_job_add(ltc *ctx, int type, uint64_t key, int offset, int 
 	if(type == ASY_WRITE || type == ASY_READ || type == SYN_WRITE)//Process Hash table, Increase the respective count
 	{
 
-		struct hash_asyio_key *temp_ptr;			
+		struct hash_asyio_key *temp_ptr;
 		rcu_read_lock();
 		hash_for_each_possible_rcu(ASYIO_HASHTABLE, temp_ptr, hlist, bucket)
 		{
@@ -3068,18 +3068,18 @@ void asy_hash_page_key_cache_free(void *ptr)
 int client_process_userspace_fast_receive(ltc *ctx, void *ret_addr, int receive_size, void *reply_descriptor, void *ret_length, int node_id, uint64_t offset, int port, int local_flag)
 {
 
-        
+
 	struct imm_message_metadata *tmp;
 	int get_size;
 	struct imm_message_metadata *descriptor;
-	
+
 	struct app_reg_port *current_hash_ptr;
 	int found = 0;
 	int bucket;
 	uint64_t port_node_key;
 	int last_ack;
 	int ack_flag=0;
-	
+
         descriptor = (struct imm_message_metadata *)kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
 	if(unlikely(!descriptor))
 	{
@@ -3143,7 +3143,7 @@ int client_process_userspace_fast_receive(ltc *ctx, void *ret_addr, int receive_
         }
 
 	//do data memcpy
-        
+
         //below copy function takes from 30 - 200ns
         memcpy(ret_addr, ((void *)tmp) + sizeof(struct imm_message_metadata), get_size);
         memcpy(ret_length, &get_size, sizeof(int));
@@ -3159,9 +3159,9 @@ int client_process_userspace_fast_receive(ltc *ctx, void *ret_addr, int receive_
                 memcpy(reply_descriptor, &null_descriptor, sizeof(struct imm_message_metadata *));
 	        kmem_cache_free(imm_message_metadata_cache, descriptor);
         }
-	
-        //do ack based on the last_ack_index, submit a request to waiting_queue_handler	
-	
+
+        //do ack based on the last_ack_index, submit a request to waiting_queue_handler
+
         if(!local_flag)
         {
                 spin_lock(&current_hash_ptr->last_ack_index_lock);//Check takes around 30-40 ns
@@ -3177,7 +3177,7 @@ int client_process_userspace_fast_receive(ltc *ctx, void *ret_addr, int receive_
                 }
                 spin_unlock(&current_hash_ptr->last_ack_index_lock);
                 if(ack_flag)//Ack takes around 85 - 120 ns
-                {	
+                {
                         struct send_and_reply_format *pass;
                         pass = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
                         pass->msg = (char*)current_hash_ptr;
@@ -3327,7 +3327,7 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                                 {
                                                         //char *tmp_check = kzalloc(1024, GFP_KERNEL);
                                                         //It needs average 150ns to pass a message into event_queue
-                                                        offset = wc[i].ex.imm_data & IMM_GET_OFFSET; 
+                                                        offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
                                                         port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
                                                         //if(atomic_read(&ctx->imm_perport_reg_num[port])<0)//this port is closed
@@ -3336,13 +3336,13 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                                                 printk(KERN_CRIT "%s: from node %d access to port %d is banned. This should not happen since sender should not be able to send this request out\n", __func__, node_id, port);
                                                         }
                                                         //printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
-                                                        
+
                                                         spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
                                                         if(!list_empty(&ctx->imm_wait_userspace_perport[port].list))//someone is waiting inside userspace
                                                         {
                                                                 struct imm_header_from_cq_to_userspace *tmp_u;
                                                                 tmp_u = list_entry(ctx->imm_wait_userspace_perport[port].list.next, struct imm_header_from_cq_to_userspace, list);
-                                				list_del(&tmp_u->list);
+								list_del(&tmp_u->list);
                                                                 client_process_userspace_fast_receive(ctx, tmp_u->ret_addr, tmp_u->receive_size, tmp_u->reply_descriptor, tmp_u->ret_length, node_id, offset, port, 0);
 				                                kmem_cache_free(imm_wait_userspace_buffer_cache, tmp_u);
                                                         }
@@ -3389,7 +3389,7 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                                         wake_up_process(ctx->imm_store_semaphore_task[semaphore]);
                                                         ctx->imm_store_semaphore_task[semaphore]=NULL;
                                                         #endif
-                                                        
+
 
                                                         //spin_lock(&ctx->imm_store_semaphore_lock[semaphore]);
                                                         ctx->imm_store_semaphore[semaphore] = NULL;
@@ -3401,7 +3401,7 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                         if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
                                         {
                                                 struct send_and_reply_format *recv;
-                                                connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
+                                                connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
                                                 recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
                                                 recv->length = ctx->rx_depth/4;
                                                 recv->src_id = connection_id;
@@ -3419,7 +3419,7 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                         break;
                                 default:
 				        connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
-        				printk(KERN_ALERT "%s: connection %d Recv weird event as %d\n", __func__, connection_id, (int)wc[i].opcode);
+					printk(KERN_ALERT "%s: connection %d Recv weird event as %d\n", __func__, connection_id, (int)wc[i].opcode);
                         }
 		}
 	}
@@ -3529,7 +3529,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 
 				switch (type) {
 				case MSG_CLIENT_SEND:
-				case MSG_SERVER_SEND:	
+				case MSG_SERVER_SEND:
 				{
 					struct send_and_reply_format *recv;
 					recv = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
@@ -3563,7 +3563,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					//kmem_cache_free(header_cache, header_addr);
 					header_cache_free(free_ptr);
 					break;
-				}	
+				}
 				case MSG_RESERVE_LOCK:
 				case MSG_UNLOCK:
 				case MSG_GET_REMOTEMR:
@@ -3580,7 +3580,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					recv->length = header_addr->length;
 					recv->msg = addr;
 					recv->type = type;
-					
+
 					spin_lock(&wq_lock[QUEUE_HIGH]);
 					list_add_tail(&(recv->list), &request_list[QUEUE_HIGH].list);
 					spin_unlock(&wq_lock[QUEUE_HIGH]);
@@ -3860,7 +3860,7 @@ EXPORT_SYMBOL(client_send_message_local_reply);
  * @priority: priority level
  */
 int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
-{	
+{
 	struct ib_ud_wr ud_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
@@ -4054,16 +4054,16 @@ int client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lm
 	{
                 if(!poll_addr)
                 {
-        		client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
-        		if(poll_status)
-	        		goto retry_send_request;
+			client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+			if(poll_status)
+				goto retry_send_request;
                 }
 	}
 	else
 	{
 		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
 	}
-	
+
         //#ifdef NON_SHARE_POLL_CQ_MODEL
 	//spin_unlock(&connection_lock[connection_id]);
         //#endif
@@ -4079,7 +4079,7 @@ EXPORT_SYMBOL(client_send_request);
  */
 int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
-        #ifdef SHARE_POLL_CQ_MODEL 
+        #ifdef SHARE_POLL_CQ_MODEL
 	while((*check)==SEND_REPLY_WAIT)
 	{
 		cpu_relax();
@@ -4087,7 +4087,7 @@ int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *ch
 	}
 	return 0;
         #endif
-        #ifdef NON_SHARE_POLL_CQ_MODEL	
+        #ifdef NON_SHARE_POLL_CQ_MODEL
         int ne, i;
 	struct ib_wc wc[2];
         while(1)
@@ -4165,7 +4165,7 @@ inline int client_get_offset_and_mr_by_length(ltc *ctx, int target_node, int des
 		current_hash_ptr->remote_imm_ring_index += size;
 	ret = current_hash_ptr->remote_imm_ring_index - size;//Trace back to the real starting point
 	spin_unlock(&current_hash_ptr->remote_imm_offset_lock);
-	
+
 	//make sure does not over write than lastack
 	while(1)
 	{
@@ -4267,25 +4267,25 @@ int client_send_reply_with_rdma_write_with_imm_sge(ltc *ctx, int number_of_node,
                 }
                 real_size[i] = single_size + sizeof(struct imm_message_metadata);
 	        if(real_size[i] > IMM_MAX_SIZE)
-        	{
-        		printk(KERN_CRIT "%s: target %d, message size %d + header is larger than max size %d\n", __func__, i, real_size[i], IMM_MAX_SIZE);
-        		return -1;
-        	}
+		{
+			printk(KERN_CRIT "%s: target %d, message size %d + header is larger than max size %d\n", __func__, i, real_size[i], IMM_MAX_SIZE);
+			return -1;
+		}
 	        tar_offset_start[i] = client_get_offset_and_mr_by_length(ctx, target_node[i], port, real_size[i], &remote_mr[i]);
                 if(tar_offset_start[i]==REG_DO_QUERY_FIRST)
                 {
-        		printk(KERN_CRIT "%s: can't find node %d port %d\n", __func__, target_node[i], port);
+			printk(KERN_CRIT "%s: can't find node %d port %d\n", __func__, target_node[i], port);
                         return REG_DO_QUERY_FIRST;
                 }
 		size_count = size_count + real_size[i];
-        }	
-	
+        }
+
         for(i=0;i<number_of_node;i++)
         {
-        	connection_id[i] = client_get_connection_by_atomic_number(ctx, target_node[i], LOW_PRIORITY);
-        	store_id[i] = client_get_store_by_addr(ctx, &wait_send_reply_id[i]);
+		connection_id[i] = client_get_connection_by_atomic_number(ctx, target_node[i], LOW_PRIORITY);
+		store_id[i] = client_get_store_by_addr(ctx, &wait_send_reply_id[i]);
                 imm_data[i] = IMM_SEND_REPLY_SEND | port << IMM_PORT_PUSH_BIT | tar_offset_start[i];
-                
+
                 output_header[i].designed_port = port;
                 output_header[i].store_addr = client_ib_reg_mr_addr(ctx, output_msg[i].msg, sizeof(struct max_reply_msg));//This part need to be handled careful in the future
                 output_header[i].store_rkey = ctx->proc->rkey;
@@ -4303,16 +4303,16 @@ int client_send_reply_with_rdma_write_with_imm_sge(ltc *ctx, int number_of_node,
                 //printk(KERN_CRIT "%s: line %d: send to %d with %lu\n", __func__, __LINE__, target_node[i], tt);
                 client_send_message_with_rdma_write_with_imm_request(ctx, connection_id[i], remote_rkey[i], (uintptr_t)remote_addr[i], NULL, 0, tar_offset_start[i], imm_data[i], LITE_SEND_MESSAGE_HEADER_AND_IMM, &output_header[i], LITE_KERNELSPACE_FLAG, length[i], input_atomic[i], 0);
         }
-        for(i=0;i<number_of_node;i++)	
+        for(i=0;i<number_of_node;i++)
         {
-        	while(wait_send_reply_id[i]==SEND_REPLY_WAIT)
-        	{
-        		cpu_relax();
-        	}
-        	if(wait_send_reply_id[i] < 0)
-        	{
-        		printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with target %d node %d connection-%d store-%d status-%d\n", __func__, i, target_node[i], connection_id[i], store_id[i], wait_send_reply_id[i]);
-        	}
+		while(wait_send_reply_id[i]==SEND_REPLY_WAIT)
+		{
+			cpu_relax();
+		}
+		if(wait_send_reply_id[i] < 0)
+		{
+			printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with target %d node %d connection-%d store-%d status-%d\n", __func__, i, target_node[i], connection_id[i], store_id[i], wait_send_reply_id[i]);
+		}
                 else
                 {
                         count++;
@@ -4329,7 +4329,7 @@ int client_send_reply_with_rdma_write_with_imm_sge(ltc *ctx, int number_of_node,
 	kfree(output_header);
 	kfree(remote_addr);
 	kfree(remote_rkey);
-	
+
 	return count;
 }
 EXPORT_SYMBOL(client_send_reply_with_rdma_write_with_imm_sge);
@@ -4402,25 +4402,25 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 		printk(KERN_CRIT "%s: can't find node %d port %d\n", __func__, target_node, port);
 		return REG_DO_QUERY_FIRST;
 	}
-	
+
 	//retry_send_reply_with_imm_request:
         if(local_flag)
                 connection_id = -1;
         else
-        	connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);//25-40ns
+		connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);//25-40ns
 	//test6-start takes 59ns, occasionally takes 120-170ns(test 10 times with 10000 average runs in each test, and get 1 number in this range)
-	
-        
-        imm_data = IMM_SEND_REPLY_SEND | port << IMM_PORT_PUSH_BIT | tar_offset_start; 
+
+
+        imm_data = IMM_SEND_REPLY_SEND | port << IMM_PORT_PUSH_BIT | tar_offset_start;
         if(ret_addr)
         {
                 store_id = client_get_store_by_addr(ctx, &wait_send_reply_id);//
-        	//test6-end
+		//test6-end
                 //printk(KERN_CRIT "%s: send message to %d %d\n", __func__, target_node, store_id);
-        	//imm_data = IMM_SEND_REPLY_SEND | tar_offset_start;
-	
+		//imm_data = IMM_SEND_REPLY_SEND | tar_offset_start;
+
                 output_header = &ctx->imm_store_header[store_id];
-        	output_header->store_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
+		output_header->store_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
                 output_header->store_rkey = ctx->proc->rkey;
                 output_header->store_semaphore = store_id;
         }
@@ -4437,8 +4437,8 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	output_header->size = size;
         if(!local_flag)
         {
-        	remote_addr = remote_mr->addr;
-        	remote_rkey = remote_mr->rkey;
+		remote_addr = remote_mr->addr;
+		remote_rkey = remote_mr->rkey;
         }
         else
         {
@@ -4466,17 +4466,17 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 		}
                 if(ret_addr)//regular send-reply handling
                 {
-        		if(lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag)//check reply buffer continuous
-        		{
-        			userspace_reply_continuous = 1;
-        			real_ret_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
-        			output_header->store_addr = (uintptr_t) real_ret_addr;//This part need to be handled careful in the future
-        		}
-        		else{
-        			real_ret_addr = kmem_cache_alloc(imm_copy_userspace_buffer_cache, GFP_KERNEL);
-        			output_header->store_addr = client_ib_reg_mr_addr(ctx, real_ret_addr, max_ret_size);//This part need to be handled careful in the future
-        		}
-        
+			if(lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag)//check reply buffer continuous
+			{
+				userspace_reply_continuous = 1;
+				real_ret_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
+				output_header->store_addr = (uintptr_t) real_ret_addr;//This part need to be handled careful in the future
+			}
+			else{
+				real_ret_addr = kmem_cache_alloc(imm_copy_userspace_buffer_cache, GFP_KERNEL);
+				output_header->store_addr = client_ib_reg_mr_addr(ctx, real_ret_addr, max_ret_size);//This part need to be handled careful in the future
+			}
+
                         if(ret_length && userspace_send_continuous && userspace_reply_continuous && lite_check_page_continuous(ret_length, sizeof(int), &phys_addr))
                         {
                                 userspace_retlength_continuous = 1;
@@ -4487,7 +4487,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                 }
                 else//process send request here if it's a pure send request
                 {
-        	        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_USERSPACE_FLAG, 0, NULL, 1);
+		        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_USERSPACE_FLAG, 0, NULL, 1);
                         return 0;
                 }
 		#ifdef SCHEDULE_MODEL
@@ -4500,15 +4500,15 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                         if(userspace_retlength_continuous)
                                 return 0;
                 }
-		else//local_sendreply will only be in this category 
+		else//local_sendreply will only be in this category
                 {
                         if(!local_flag)
                         {
-        			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
+				client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
                         }
                         else
                         {
-        			client_send_message_with_rdma_emulated_for_local(ctx, port, real_addr, size, output_header, LITE_USERSPACE_FLAG);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
+				client_send_message_with_rdma_emulated_for_local(ctx, port, real_addr, size, output_header, LITE_USERSPACE_FLAG);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
                         }
                 }
 	}
@@ -4516,25 +4516,25 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	{
                 if(ret_addr)
                 {
-        		#ifdef SCHEDULE_MODEL
-        		ctx->imm_store_semaphore_task[store_id] = get_current();
-        		set_current_state(TASK_INTERRUPTIBLE);
-        		#endif
-        		client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);
+			#ifdef SCHEDULE_MODEL
+			ctx->imm_store_semaphore_task[store_id] = get_current();
+			set_current_state(TASK_INTERRUPTIBLE);
+			#endif
+			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);
                 }
                 else
                 {
-        		client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 1);
+			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 1);
                         return 0;
                 }
 	}
-	
+
 	#ifdef SCHEDULE_MODEL
 	schedule();
 	set_current_state(TASK_RUNNING);
 	#endif
 
-	
+
 	//cpurelax model
 	#ifdef CPURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
@@ -4668,15 +4668,15 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
         int i;
 
 	//spin_lock(&connection_lock[connection_id]);
-	
+
 	retry_send_imm_request:
 
 	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
-	
+
 	wr = &rdma_wr.wr;
 	wr->sg_list = sge;
-	
+
 	//wr->wr_id = connection_id;
 
 	rdma_wr.remote_addr = (uintptr_t) (input_mr_addr+offset);
@@ -4685,8 +4685,8 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
         {
                 if(s_mode!= LITE_SEND_MESSAGE_HEADER_AND_IMM)
                 {
-        		printk(KERN_CRIT "%s: wrong mode %d - in sge design\n", __func__, s_mode);
-        		return -1;
+			printk(KERN_CRIT "%s: wrong mode %d - in sge design\n", __func__, s_mode);
+			return -1;
                 }
                 read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
                 if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
@@ -4700,14 +4700,14 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                         wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
                         wr->send_flags = 0;
                 }
-		
+
 		wr->num_sge = 1 + sge_length;
 		wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
-		
+
 		temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
 
 		wr->ex.imm_data = imm;
-		
+
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
@@ -4718,9 +4718,9 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                 for(i=0;i<sge_length;i++)
                 {
                         temp_addr = client_ib_reg_mr_addr(ctx, input_atomic[i].vaddr, input_atomic[i].len);
-        		sge[i+1].addr = temp_addr;
-        		sge[i+1].length = input_atomic[i].len;
-        		sge[i+1].lkey = ctx->proc->lkey;
+			sge[i+1].addr = temp_addr;
+			sge[i+1].length = input_atomic[i].len;
+			sge[i+1].lkey = ctx->proc->lkey;
 			#ifdef LITE_GET_SIZE
 				total_size = total_size + input_atomic[i].len;
 			#endif
@@ -4746,14 +4746,14 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                                 wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
                                 wr->send_flags = 0;
                         }
-                        
+
                         wr->num_sge = 2;
                         wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
-                        
+
                         temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
 
                         wr->ex.imm_data = imm;
-                        
+
                         sge[0].addr = temp_header_addr;
                         sge[0].length = sizeof(struct imm_message_metadata);
                         sge[0].lkey = ctx->proc->lkey;
@@ -4784,7 +4784,7 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
                                 wr->wr_id = 0;
                                 wr->send_flags = 0;
                         }
-                        
+
                         wr->num_sge = 1;
                         wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
@@ -4811,7 +4811,7 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
 	//test12 ends
 	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
-	
+
 	if(!ret)
 	{
 		if(flag==1)
@@ -4865,7 +4865,7 @@ int client_rdma_write_with_imm(ltc *ctx, int connection_id, struct lmr_info *inp
 	//sge.addr = (uint64_t)ret->addr;
 	//sge.length = ret->length;
 	//sge.lkey = ret->lkey;
-	
+
 	wr->ex.imm_data = imm;
 
 	sge.addr = tempaddr;
@@ -5025,7 +5025,7 @@ int client_send_request_without_polling(ltc *ctx, int connection_id, enum mode s
 	sge.addr = tempaddr;
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
-	
+
 	//self_time = ktime_get();
 	lite_dp("ib_post_send %d", 0);
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
@@ -5096,9 +5096,9 @@ int client_fetch_and_add(ltc *ctx, int connection_id, struct lmr_info *input_mr,
 	atomic_wr.remote_addr = (uintptr_t)input_mr->addr;
 	atomic_wr.rkey = input_mr->rkey;
 	atomic_wr.compare_add = input_value;
-	
+
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, sizeof(uint64_t));
-	
+
 	sge.addr = tempaddr;
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
@@ -5152,9 +5152,9 @@ int client_fetch_and_add_loopback(ltc *ctx, struct lmr_info *input_mr, void *add
 	atomic_wr.remote_addr = (uintptr_t)input_mr->addr;
 	atomic_wr.rkey = input_mr->rkey;
 	atomic_wr.compare_add = input_value;
-	
+
 	tempaddr = client_ib_reg_mr_addr(ctx, addr, sizeof(uint64_t));
-	
+
 	sge.addr = tempaddr;
 	sge.length = sizeof(uint64_t);
 	sge.lkey = ctx->proc->lkey;
@@ -5407,7 +5407,7 @@ EXPORT_SYMBOL(client_compare_swp_loopback);
  * @password: pin code
  */
 int client_create_metadata_by_lmr(ltc *ctx, uint64_t ret_key, struct lmr_info **ret_mr_list, int ret_mr_list_length, int target_node, int roundup_size, uint64_t permission, bool local_flag, int password)
-{	
+{
 	int bucket;
         uint64_t t_bucket;
 	struct hash_asyio_key *entry;
@@ -5444,9 +5444,9 @@ int client_create_metadata_by_lmr(ltc *ctx, uint64_t ret_key, struct lmr_info **
 
 	if(!local_flag)
 	{
-	
+
 		entry->mr_local_index = atomic_inc_return(&ctx->mr_index_counter);
-	
+
 		entry->initialized_flag=0;
 		entry->link_flag = ASY_PAGE_UNLINK;
 		bitmap_size_with_long = BITS_TO_LONGS(roundup_size/REMOTE_MEMORY_PAGE_SIZE);
@@ -5459,9 +5459,9 @@ int client_create_metadata_by_lmr(ltc *ctx, uint64_t ret_key, struct lmr_info **
 	//hash_add_rcu(ASYIO_HASHTABLE, &entry->hlist, ret_key);
 	hash_add_rcu(ASYIO_HASHTABLE, &entry->hlist, bucket);
 	spin_unlock(&(ASYIO_HASHTABLE_LOCK[bucket]));
-	//get_time_difference(3, self_time);	
+	//get_time_difference(3, self_time);
 	//map mr->addr to lmr since we are going to use this when we do deregister
-	
+
 	mraddr_to_lmr_mapping = kzalloc(sizeof (struct hash_mraddr_to_lmr_metadata), GFP_KERNEL);
 	mraddr_to_lmr_mapping->mother_addr = entry;
 	mraddr_to_lmr_mapping->hash_key = (uint64_t)ret_mr_list[0]->addr;
@@ -5473,7 +5473,7 @@ int client_create_metadata_by_lmr(ltc *ctx, uint64_t ret_key, struct lmr_info **
 	hash_add_rcu(MR_HASHTABLE, &mraddr_to_lmr_mapping->hlist, t_bucket);
 	spin_unlock(&(MR_HASHTABLE_LOCK[bucket]));
 	//printk(KERN_CRIT "%s: add key %llu\n", __func__, ret_key);
-	
+
 	return password;
 }
 EXPORT_SYMBOL(client_create_metadata_by_lmr);
@@ -5507,8 +5507,8 @@ int client_add_askmr_table(ltc *ctx, uint64_t identifier, uint64_t lmr, uint64_t
 		printk(KERN_CRIT "%s: identifier %llu is already existed\n", __func__, identifier);
                 // if we are going to do replacement instead of warning and return
 	        //current_hash_ptr->lmr = lmr;
-        	//current_hash_ptr->identifier = identifier;
-        	//current_hash_ptr->permission = permission;
+		//current_hash_ptr->identifier = identifier;
+		//current_hash_ptr->permission = permission;
                 //current_hash_ptr->hash_key = identifier;
 		return 1;
 	}
@@ -5657,20 +5657,20 @@ int client_rdma_asyhandler_init(ltc *ctx)
 }
 
 static __always_inline pte_t *lite_get_locked_pte(struct mm_struct *mm,
-                                                   unsigned long addr,            
-						   spinlock_t **ptl)              
+                                                   unsigned long addr,
+						   spinlock_t **ptl)
 {
 	pgd_t *pgd = pgd_offset(mm, addr);
 	pud_t *pud = pud_alloc(mm, pgd, addr);
-	if (pud) {            
+	if (pud) {
 		pmd_t *pmd = pmd_alloc(mm, pud, addr);
-		if (pmd) {    
-			BUG_ON(pmd_trans_huge(*pmd));  
+		if (pmd) {
+			BUG_ON(pmd_trans_huge(*pmd));
 			return pte_alloc_map_lock(mm, pmd, addr, ptl);
-		}             
+		}
 	}
-	BUG();                
-	return NULL;          
+	BUG();
+	return NULL;
 }
 
 static __always_inline int lite_vm_insert_pfn(struct vm_area_struct *vma, unsigned long addr, unsigned long paddr, bool is_write)
@@ -5710,7 +5710,7 @@ out:
 }
 
 int client_alloc_continuous_memory(ltc *ctx, unsigned long long vaddr, unsigned long size)
-{       
+{
         //struct vm_area_struct *vma = find_vma(current->mm, addr);
         unsigned long roundup_size = (((1<<PAGE_SHIFT) + size - 1)>>PAGE_SHIFT)<<PAGE_SHIFT;
         //unsigned long u_addr = get_unmapped_area(NULL, 0, roundup_size, 0, 0);
@@ -5727,10 +5727,10 @@ int client_alloc_continuous_memory(ltc *ctx, unsigned long long vaddr, unsigned 
                 cur_paddr += PAGE_SIZE;
                 cur_uaddr += PAGE_SIZE;
         }
-        
+
         printk(KERN_CRIT "%s: uaddr:%lx paddr:%lx size:%lx vma:%p\n", __func__, u_addr, p_addr, roundup_size, vma);
         printk("%s: test:%s\n", __func__, (char *)p_addr);
-        
+
         //if(copy_to_user((void *)vaddr, &u_addr, sizeof(unsigned long)))
         //      return -EFAULT;
         return 0;
@@ -5779,7 +5779,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
                 printk(KERN_CRIT "Invalid IP: %s\n", servername);
                 return 0;
         }
-	
+
 	printk(KERN_CRIT "Start establish connection\n");
 
 	//Build cache for memory --> slab
@@ -5804,13 +5804,13 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 
 	//lock related
 	lock_queue_element_buffer_cache = kmem_cache_create("lock_queue_element_cache", sizeof(struct lite_lock_queue_element), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
-	
+
 	pr_crit("%s:%d before client_init_interface\n", __func__, __LINE__);
 	ctx = client_init_interface(ib_port, ib_dev);
 	pr_crit("%s:%d after client_init_interface\n", __func__, __LINE__);
 	if (!ctx) {
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;	
+		return 0;
 	}
 
         Connected_Ctx[temp_ctx_number-1] = ctx;
@@ -5820,16 +5820,16 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	{
 		spin_lock_init(&connection_lock[i]);
 	}
-	
+
         //Initialize waiting_queue/request list related items
         wq_lock = kmalloc(sizeof(spinlock_t) * QUEUE_NUM_OF_QUEUE, GFP_KERNEL);
         request_list = kmalloc(sizeof(struct send_and_reply_format) * QUEUE_NUM_OF_QUEUE, GFP_KERNEL);
         for(i=0;i<QUEUE_NUM_OF_QUEUE;i++)
         {
-        	spin_lock_init(&wq_lock[i]);
-        	INIT_LIST_HEAD(&(request_list[i].list));
+		spin_lock_init(&wq_lock[i]);
+		INIT_LIST_HEAD(&(request_list[i].list));
         }
-        
+
 	//Initialize HASHTABLE
 	hash_init(MR_HASHTABLE);
 	for(i=0;i< 1<<HASH_TABLE_SIZE_BIT;i++)
@@ -5853,10 +5853,10 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		return 0;
 	}
 	wake_up_process(thread_priority_handler);
-	
+
 	//Start handling completion cq
 	//This part need to be done on Monday
-	
+
 	//thread_poll_cq = (struct task_struct **)kmalloc(NUM_POLLING_THREADS * sizeof(struct task_struct *), GFP_KERNEL);
 	thread_poll_cq = (struct task_struct **)kmalloc((NUM_POLLING_THREADS+2) * sizeof(struct task_struct *), GFP_KERNEL);
 	for(i=0;i<NUM_POLLING_THREADS;i++)
@@ -5892,7 +5892,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	}
 
 	//for send-cq poller
-        #ifdef SHARE_POLL_CQ_MODEL 
+        #ifdef SHARE_POLL_CQ_MODEL
 	{
 		char thread_name[32]={};
 		sprintf(thread_name, "send cq_poller");
@@ -5918,10 +5918,10 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	{
 		spin_lock_init(&(ASYIO_PAGE_HASHTABLE_LOCK[i]));
 	}
-	
+
         //For write-IMM processing (query and future send)
 	//EREP
-	
+
 	hash_init(LOCAL_MEMORYRING_PORT_HASHTABLE);
 	for(i=0;i< 1<<HASH_TABLE_SIZE_BIT;i++)
 	{
@@ -5982,21 +5982,21 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	}
 
 	ctx->node_id = NODE_ID;
-	client_ktcp_recv(excsocket, (char *)&ask_number_of_MR_set, sizeof(int));	
+	client_ktcp_recv(excsocket, (char *)&ask_number_of_MR_set, sizeof(int));
 	printk(KERN_ALERT "Receive %d\n", ask_number_of_MR_set);
-	
+
 	if(ask_number_of_MR_set < 1 || ask_number_of_MR_set > MAX_CONNECTION)
 	{
 		printk(KERN_ALERT "ask too many required MR set from server %d\n", ask_number_of_MR_set);
 		return 0;
 	}
-	
+
 	//post-recv RC for CD QP
 	/*for(i=0;i<ctx->num_parallel_connection;i++)//This part need to be modified into max(num_parallel_connection, ask_number_of_MR_set) in the future.
 	{
 		int cur_connection = server_id + i;
 	}*/
-	
+
 	//UD_POST
 	client_post_receives_message_UD(ctx, RECV_DEPTH);
 
@@ -6009,7 +6009,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		client_ktcp_send(excsocket, msg, sizeof(LID_SEND_RECV_FORMAT));
 		udelay(100);
 	}
-	
+
 	//Connect RC to CD
         memset(&recv_ah, 0, sizeof(struct client_ah_combined));
         memset(&send_ah, 0, sizeof(struct client_ah_combined));
@@ -6038,10 +6038,10 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		printk(KERN_CRIT "fail to create ah for CD\n");
 	}
 	printk(KERN_CRIT "%s: UD message from CD with qpn %d and lid %d: %p\n", __func__, recv_ah.qpn, recv_ah.dlid, ctx->ah[0]);
-	
-	send_ah.qpn 	= ctx->qpUD->qp_num;
+
+	send_ah.qpn	= ctx->qpUD->qp_num;
 	send_ah.node_id = ctx->node_id;
-	send_ah.qkey 	= 0x336;
+	send_ah.qkey	= 0x336;
 	send_ah.dlid    = ctx->portinfo.lid;
 	if(SGID_INDEX!=-1)
 	{
@@ -6049,7 +6049,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	}
 	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
 
-	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, NODE_ID);	
+	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, NODE_ID);
 	return ctx;
 }
 EXPORT_SYMBOL(client_establish_conn);
@@ -6069,9 +6069,9 @@ int client_cleanup_module(void)
 		}
 		//kthread_stop(thread_poll_cq);
 		//thread_poll_cq = NULL;
-		
+
 		printk(KERN_INFO "Kill whole poll cq thread\n");
-		
+
 		if(thread_poll_cq[NUM_POLLING_THREADS])//remove UD polling thread
 		{
 			kthread_stop(thread_poll_cq[NUM_POLLING_THREADS]);
@@ -6087,8 +6087,8 @@ int client_cleanup_module(void)
 		}
                 #endif
 	}
-        
-		
+
+
 	else
 	{
 		printk(KERN_INFO "Nothing to kill\n");
@@ -6189,7 +6189,7 @@ static int lite_mmaptest_mmap(struct file *filp, struct vm_area_struct *vma)
 	unsigned long cur_size = 0;
 	unsigned long cur_paddr = p_addr;
 	unsigned long cur_uaddr = u_addr;
-	
+
 	while(cur_size<roundup_size)
 	{
 		lite_vm_insert_pfn(vma, cur_uaddr, virt_to_phys((void *)cur_paddr), 1);
@@ -6207,20 +6207,20 @@ static int lite_mmaptest_mmap(struct file *filp, struct vm_area_struct *vma)
 	printk(KERN_CRIT "%s: uaddr:%lx paddr:%lx size:%lx(%lx) vma:%p\n", __func__, u_addr, p_addr, roundup_size, vma->vm_end - vma->vm_start, vma);
 	/*
 	unsigned long page,pos;
-	unsigned long start = (unsigned long)vma->vm_start; 
-	unsigned long size = (unsigned long)(vma->vm_end-vma->vm_start); 
+	unsigned long start = (unsigned long)vma->vm_start;
+	unsigned long size = (unsigned long)(vma->vm_end-vma->vm_start);
 	int ret;
 
 	printk(KERN_INFO "lite_mmaptest_mmap called\n");
 
         if (size>1024*1024*4)
                 return -EINVAL;
- 
+
         pos=(unsigned long)kzalloc(size, GFP_KERNEL);
 	//for (page = virt_to_page(pos); page < virt_to_page(pos + size); page++) {
-	//	mem_map_reserve(page); 
+	//	mem_map_reserve(page);
 	//}
- 
+
         while (size > 0) {
                 page = virt_to_phys((void *)pos);
                 ret = remap_pfn_range(vma, start, page>>PAGE_SHIFT, PAGE_SIZE, vma->vm_page_prot);
@@ -6234,25 +6234,25 @@ static int lite_mmaptest_mmap(struct file *filp, struct vm_area_struct *vma)
                 size-=PAGE_SIZE;
 		printk(KERN_CRIT "%s: success %d\n", __func__, ret);
         }*/
-        return 0; 
+        return 0;
 }
 
 static int lite_mmaptest_open(struct inode *inode, struct file *filp)
 {
-	return 0; 
+	return 0;
 }
-		
+
 static int lite_mmaptest_release(struct inode *inode, struct file *filp)
 {
 	return 0;
-}	
+}
 
 static struct file_operations lite_mmaptest_fops = {
-	mmap: 		lite_mmaptest_mmap,
+	mmap:		lite_mmaptest_mmap,
 	//munmap:		lite_mmaptest_munmap,
-        open: 		lite_mmaptest_open,
-	release: 	lite_mmaptest_release,	
-}; 
+        open:		lite_mmaptest_open,
+	release:	lite_mmaptest_release,
+};
 
 int lite_dev;
 dev_t lite_dev_num; // Global variable for the first device number
@@ -6265,7 +6265,7 @@ static int __init lite_internal_init_module(void)
         atomic_set(&Connected_LITE_Num, 0);
 
 
-	//lite_dev = register_chrdev(0,"lite_mmaptest",&lite_mmaptest_fops); 	
+	//lite_dev = register_chrdev(0,"lite_mmaptest",&lite_mmaptest_fops);
 
 	if (alloc_chrdev_region(&lite_dev_num, 0, 1, "lite_internal") < 0)
 	{
@@ -6300,12 +6300,12 @@ static int __init lite_internal_init_module(void)
 
 static void __exit lite_internal_cleanup_module(void)
 {
-	//unregister_chrdev(lite_dev,"lite_mmaptest"); 
+	//unregister_chrdev(lite_dev,"lite_mmaptest");
 	cdev_del(&c_dev);
 	device_destroy(cl, lite_dev_num);
 	class_destroy(cl);
 	unregister_chrdev_region(lite_dev_num, 1);
-	
+
 	printk(KERN_CRIT "rmmod lite_internal module\n");
 	return;
 }
