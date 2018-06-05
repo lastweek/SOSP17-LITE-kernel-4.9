@@ -1097,67 +1097,54 @@ int client_post_receives_message_UD(ltc *ctx, int depth)
 	struct ib_recv_wr wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
 	int i;
-        //ktime_t start;
-        //ktime_t end;
-        //int ret;
-	#ifdef LITE_GET_TIME
-		struct timespec ts, te, diff;
-		getnstimeofday(&ts);
-	#endif
-		for(i=0;i<depth;i++)
-		{
-			char *temp_addr, *temp_header_addr;
-			uintptr_t mid_addr, mid_header_addr;
-			struct liteapi_post_receive_intermediate_struct *p_r_i_struct;
+#ifdef LITE_GET_TIME
+	struct timespec ts, te, diff;
+	getnstimeofday(&ts);
+#endif
 
-			temp_addr = (char *)kmem_cache_alloc(post_receive_cache, GFP_KERNEL);
-			temp_header_addr = (char *)kmem_cache_alloc(header_cache_UD, GFP_KERNEL);
-			p_r_i_struct = (struct liteapi_post_receive_intermediate_struct *)kmem_cache_alloc(intermediate_cache, GFP_KERNEL);
+	/* Need more decent error handling. */
+	for (i = 0; i < depth; i++) {
+		char *temp_addr, *temp_header_addr;
+		uintptr_t mid_addr, mid_header_addr;
+		struct liteapi_post_receive_intermediate_struct *p_r_i_struct;
 
-			p_r_i_struct->header = (uintptr_t)temp_header_addr;
-			p_r_i_struct->msg = (uintptr_t)temp_addr;
+		temp_addr = kmem_cache_alloc(post_receive_cache, GFP_KERNEL);
+		temp_header_addr = kmem_cache_alloc(header_cache_UD, GFP_KERNEL);
+		p_r_i_struct = kmem_cache_alloc(intermediate_cache, GFP_KERNEL);
 
-			mid_addr = client_ib_reg_mr_addr(ctx, temp_addr, POST_RECEIVE_CACHE_SIZE);
-			mid_header_addr = client_ib_reg_mr_addr(ctx, temp_header_addr, sizeof(struct liteapi_header)+40);
+		p_r_i_struct->header = (uintptr_t)temp_header_addr;
+		p_r_i_struct->msg = (uintptr_t)temp_addr;
 
-			sge[0].addr = (uintptr_t)mid_header_addr;
-			sge[0].length = sizeof(struct liteapi_header) + 40;
-			sge[0].lkey = ctx->proc->lkey;
+		mid_addr = client_ib_reg_mr_addr(ctx, temp_addr, POST_RECEIVE_CACHE_SIZE);
+		mid_header_addr = client_ib_reg_mr_addr(ctx, temp_header_addr, sizeof(struct liteapi_header)+40);
 
-			sge[1].addr = (uintptr_t)mid_addr;
-			sge[1].length = POST_RECEIVE_CACHE_SIZE;
-			sge[1].lkey = ctx->proc->lkey;
+		sge[0].addr = (uintptr_t)mid_header_addr;
+		sge[0].length = sizeof(struct liteapi_header) + 40;
+		sge[0].lkey = ctx->proc->lkey;
 
-			wr.wr_id = (uint64_t)p_r_i_struct;
-			wr.next = NULL;
-			wr.sg_list = sge;
-			wr.num_sge = 2;
+		sge[1].addr = (uintptr_t)mid_addr;
+		sge[1].length = POST_RECEIVE_CACHE_SIZE;
+		sge[1].lkey = ctx->proc->lkey;
 
-                        /*wr.wr_id = i;
-                        wr.next = NULL;
-                        wr.sg_list = NULL;
-                        wr.num_sge = 0;*/
+		wr.wr_id = (uint64_t)p_r_i_struct;
+		wr.next = NULL;
+		wr.sg_list = sge;
+		wr.num_sge = 2;
 
-                        //start = ktime_get();
+		ib_post_recv(ctx->qpUD, &wr, &bad_wr);
+	}
 
-			ib_post_recv(ctx->qpUD, &wr, &bad_wr);
-                        //if(ret)
-                        //        printk(KERN_CRIT "error\n");
-                        //end = ktime_get();
-                        //client_internal_stat(client_get_time_difference(start, end), LITE_STAT_ADD);
-		}
-                //printk(KERN_CRIT "%s: LITE_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, LITE_STAT_CLEAR));
-	#ifdef LITE_GET_TIME
-		getnstimeofday(&te);
-		diff = timespec_sub(te,ts);
-		printk("[%s] time %lu\n", __func__, diff.tv_nsec);
-	#endif
+#ifdef LITE_GET_TIME
+	getnstimeofday(&te);
+	diff = timespec_sub(te,ts);
+	printk("[%s] time %lu\n", __func__, diff.tv_nsec);
+#endif
 	return depth;
 }
 
 /*
  * Changed kernel API (struct msghdr) broke the following two kernel TCP functions.
- * This version is known to work at 4.4 (or some version lower).
+ * This version is known to work at 4.9 (or some version lower).
  */
 
 /**
@@ -1165,31 +1152,6 @@ int client_post_receives_message_UD(ltc *ctx, int depth)
  */
 int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
 {
-#if 0
-	struct msghdr msg;
-	struct kvec iov;
-
-	{
-		if(sock->sk==NULL) return 0;
-
-		iov.iov_base=buf;
-		iov.iov_len=len;
-
-		msg.msg_control=NULL;
-		msg.msg_controllen=0;
-		msg.msg_flags=0;
-		msg.msg_name=NULL;
-		msg.msg_namelen=0;
-		msg.msg_iov=(struct iovec *)&iov;
-		msg.msg_iovlen=1;
-	}
-	//printk(KERN_INFO "ktcp_recv.sock_recvmsg");
-	//size=sock_recvmsg(sock,&msg,len,msg.msg_flags);
-	kernel_recvmsg(sock, &msg, &iov, 1, iov.iov_len, 0);
-	//printk(KERN_INFO "ktcp_recved");tyh-
-	//printk("the message is : %s\n",buf);
-	return 0;
-#else
 	struct msghdr msg;
 	struct kvec iov;
 
@@ -1207,7 +1169,6 @@ int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
 
 	kernel_recvmsg(sock, &msg, &iov, 1, len, 0);
 	return 0;
-#endif
 }
 
 /**
@@ -1215,32 +1176,6 @@ int client_ktcp_recv(struct socket *sock, unsigned char *buf, int len)
  */
 int client_ktcp_send(struct socket *sock,char *buf,int len)
 {
-#if 0
-	struct msghdr msg;
-	struct kvec iov;
-	//	printk(KERN_INFO "ktcp_send\n");
-	if(sock==NULL)
-	{
-		printk("ksend the cscok is NULL\n");
-		return -1;
-	}
-
-	iov.iov_base=buf;
-	iov.iov_len=len;
-
-	msg.msg_control=NULL;
-	msg.msg_controllen=0;
-	msg.msg_flags=0;
-	msg.msg_iov=(struct iovec *)&iov;
-	msg.msg_iovlen=1;
-	msg.msg_name=NULL;
-	msg.msg_namelen=0;
-
-	//printk(KERN_INFO "ktcp_send.sock_sendmsg");
-	kernel_sendmsg(sock,&msg,&iov, 1, iov.iov_len);
-	//printk(KERN_INFO "message sent!");
-	return 0;
-#else
 	struct msghdr msg;
 	struct kvec iov;
 
@@ -1258,7 +1193,6 @@ int client_ktcp_send(struct socket *sock,char *buf,int len)
 
 	kernel_sendmsg(sock, &msg, &iov, 1, len);
 	return 0;
-#endif
 }
 
 /**
@@ -1297,6 +1231,7 @@ int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum i
                 attr.ah_attr.dlid = 0;
                 attr.ah_attr.ah_flags = 1;//attr.ah_attr.is_global = 1;
         }*/
+
 	if(SGID_INDEX != -1)
 	{
 		attr.ah_attr.ah_flags = 1;
@@ -3859,7 +3794,9 @@ EXPORT_SYMBOL(client_send_message_local_reply);
  * @store_semaphore: semaphore of reply buffer
  * @priority: priority level
  */
-int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
+int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr,
+				 int size, uint64_t store_addr, uint64_t store_semaphore,
+				 int priority, void *addr_kvaddr)
 {
 	struct ib_ud_wr ud_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;

@@ -104,12 +104,15 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-#define lite_err(fmt, ...)	\
-	pr_info("%s():%d "fmt"\n", __func__, __LINE__, __VA_ARGS__)
+#define lite_err(fmt, ...)					\
+	pr_crit("[%s:%d] %s():%d: "fmt"\n",			\
+		current->comm, current->pid,			\
+		__func__, __LINE__, __VA_ARGS__)
 
-#define lite_dp(fmt, ...)	\
-	pr_crit("%s():%d "fmt"\n", __func__, __LINE__, __VA_ARGS__)
-
+#define lite_dp(fmt, ...)					\
+	pr_crit("[%s:%d] %s():%d: "fmt"\n",			\
+		current->comm, current->pid,			\
+		__func__, __LINE__, __VA_ARGS__)
 
 #define DEBUG_SHINYEH
 
@@ -208,7 +211,7 @@
 #define RING_BUFFER_MAXSIZE 4096
 #define REMOTE_MEMORY_PAGE_SIZE	RING_BUFFER_MAXSIZE
 #define INTERARRIVAL_UNLESS_FENCE 1
-#define ASY_SETUP_COMPLETE true 
+#define ASY_SETUP_COMPLETE true
 
 //alloc continuous memory related
 #define LITE_MEM_OFFSET 0x100000000
@@ -360,10 +363,10 @@ struct hash_asyio_key{
 	unsigned long bitmap_size;
 	unsigned long *askmr_bitmap;
 	int	link_flag;
-	
+
 	struct hlist_node hlist;
 	struct list_head list;
-	
+
 	uint64_t lite_handler;
 	int priority;
 
@@ -472,7 +475,7 @@ struct lite_lock_reserve_form{
 
 struct lite_lock_queue_element{
 	uint64_t        store_addr;
-	uint64_t        store_semaphore;	
+	uint64_t        store_semaphore;
 	uint32_t        src_id;
 	unsigned int	ticket_num;
 	int	lock_num;
@@ -520,7 +523,7 @@ struct asy_page_fence_linked_list_entry{
 };
 
 struct send_and_reply_format
-{       
+{
         uint32_t        src_id;
         uint64_t        store_addr;
 	uint64_t	store_semaphore;
@@ -605,7 +608,7 @@ struct asy_IO_header
 	int type;
 	uint32_t page_num;
 	char *addr;
-	int* wait_id_addr; 
+	int* wait_id_addr;
 };
 
 enum asy_IO_event_type {
@@ -642,14 +645,14 @@ struct imm_message_metadata
 };
 
 struct imm_header_from_cq_to_port
-{       
+{
         uint32_t        source_node_id;
 	uint64_t	offset;
 };
 
 
 struct imm_header_from_cq_to_userspace
-{       
+{
         void *ret_addr;
         int receive_size;
         void *reply_descriptor;
@@ -663,14 +666,14 @@ struct lite_context {
 	struct ib_pd		*pd;
 	struct ib_cq		**cq; // one completion queue for all qps
 	atomic_t *cq_block;
-    	wait_queue_head_t *cq_block_queue;
+	wait_queue_head_t *cq_block_queue;
 	struct ib_cq		**send_cq;
 	struct ib_qp		**qp; // multiple queue pair for multiple connections
-	
+
 	struct ib_qp		*qpUD;// one UD qp for all the send-reply connections
 	struct ib_cq		*cqUD;
 	struct ib_cq		*send_cqUD;
-	struct ib_ah 		**ah;
+	struct ib_ah		**ah;
 	struct client_ah_combined *ah_attrUD;
 	struct ib_qp		*loopback_in;
 	struct ib_qp		*loopback_out;
@@ -687,7 +690,7 @@ struct lite_context {
 //	int			 pending;
 	struct ib_port_attr     portinfo;
         int                     ib_port;
-	int 			num_connections;
+	int			num_connections;
 	int             num_node;
 	int             num_parallel_connection;
 	atomic_t             *num_alive_connection;
@@ -701,7 +704,7 @@ struct lite_context {
         //unsigned long     *atomic_request_num;
 	atomic_t *atomic_request_num_high;
 	atomic_t parallel_thread_num;
-    
+
 
 	enum s_state {
 		SS_INIT,
@@ -723,8 +726,8 @@ struct lite_context {
         RS_RDMA_RECV,
 		RS_DONE_RECV
 	} *recv_state;
-    
-    
+
+
 	atomic_t send_reply_wait_num;
 
 	struct atomic_struct **atomic_buffer;
@@ -732,7 +735,7 @@ struct lite_context {
 	int *atomic_buffer_cur_length;
 
 
-   	int (*send_handler)(char *addr, uint32_t size, int sender_id);
+	int (*send_handler)(char *addr, uint32_t size, int sender_id);
 	int (*send_reply_handler)(char *input_addr, uint32_t input_size, char *output_addr, uint32_t *output_size, int sender_id);
 	int (*atomic_send_handler)(struct atomic_struct *input_list, uint32_t length, char *output_buf, uint32_t *output_size, int sender_id);
 	int (*atomic_single_send_handler)(struct atomic_struct *input_list, uint32_t length, int sender_id);
@@ -742,7 +745,7 @@ struct lite_context {
 	atomic_t* connection_congestion_status;
 	ktime_t* connection_timer_start;
 	ktime_t* connection_timer_end;
-	
+
 	struct liteapi_header *first_packet_header, *other_packet_header;
 	int *connection_id_array;
 	uintptr_t *length_addr_array;
@@ -757,12 +760,12 @@ struct lite_context {
 	//Related to AsyIO
 	atomic_t asy_current_job;
 	atomic_t asy_latest_job;
-	
+
 	char **asy_tmp_buffer;
 	struct asy_IO_header *asy_tmp_header;
 
 	atomic_t asy_fence_counter;
-	
+
 	atomic_t mr_index_counter;
 	//struct list_head asy_fence_list;
 	//struct list_head asy_fence_list_ms;
@@ -775,7 +778,7 @@ struct lite_context {
 	atomic_t dist_barrier_counter;
 	int dist_barrier_idx;
         int last_barrier_idx[MAX_NODE];
-	
+
 	//Related to lmr
 	atomic_t lmr_inc;
 
@@ -784,7 +787,7 @@ struct lite_context {
 	//void **local_imm_ring_buffer;
 	//struct imm_metadata *remote_imm_metadata;
 	//struct lmr_info **local_imm_ring_mr;
-	
+
 	//void **imm_cache_perport;
 	struct imm_header_from_cq_to_port **imm_waitqueue_perport;
         unsigned int imm_waitqueue_perport_count_poll[IMM_MAX_PORT];
@@ -802,9 +805,9 @@ struct lite_context {
 		unsigned long *imm_store_semaphore_bitmap;
 		spinlock_t *imm_store_semaphore_lock;
                 atomic_t imm_store_semaphore_count;
-    		wait_queue_head_t *imm_store_block_queue;
+		wait_queue_head_t *imm_store_block_queue;
 		struct task_struct **imm_store_semaphore_task;
-	
+
 	atomic_t imm_cache_perport_work_head[IMM_MAX_PORT];
 	atomic_t imm_cache_perport_work_tail[IMM_MAX_PORT];
 	struct app_reg_port *last_port_node_key_hash_ptr;
@@ -813,7 +816,7 @@ struct lite_context {
 	//#define IMM_MAX_PORT 64
 	//
 	atomic_t *connection_count;
-	
+
 	//Lock related
 	atomic_t lock_num;
 	struct lite_lock_form *lock_data;
