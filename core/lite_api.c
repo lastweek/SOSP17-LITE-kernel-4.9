@@ -798,7 +798,10 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 		curr_offset = access_offset[i];
 		curr_accumulate = accumulate_length[i];
 		mr_addr = mr_addr_list[curr_index];
-                client_internal_poll_sendcq(ctx->send_cq[connection_id_list[i]], connection_id_list[i], &poll_status[i]);
+
+                client_internal_poll_sendcq(ctx->send_cq[connection_id_list[i]],
+					    connection_id_list[i],
+					    &poll_status[i]);
                 if(real_addr_list[i])
                 {
 			if(copy_to_user(local_addr + curr_accumulate, real_addr_list[i], curr_length))

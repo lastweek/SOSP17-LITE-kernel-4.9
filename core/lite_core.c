@@ -2342,10 +2342,10 @@ int waiting_queue_handler(ltc *ctx)
 					addr = client_alloc_memory_for_mr(length*sizeof(char));
                                         if(addr)
                                         {
-        					ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
-        					tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
+						ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+						tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
 					pr_info("%s(): Get alloc remote mr req 1\n", __func__);
-        					client_send_message_sge_UD_tmp(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY, ret_mr);
+						client_send_message_sge_UD_tmp(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY, ret_mr);
 					pr_info("%s(): Get alloc remote mr req 2\n", __func__);
                                         }
                                         else
@@ -3232,7 +3232,8 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 		for(i=0;i<ne;++i)
 		{
                         if(unlikely(wc[i].status!= IB_WC_SUCCESS))
-			        printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
+			        printk(KERN_ALERT "%s: failed status (%d) %s for wr_id %d\n",
+					__func__, wc[i].status, ib_wc_status_msg(wc[i].status), (int) wc[i].wr_id);
                         switch((int)wc[i].opcode)
                         {
                                 case IB_WC_RECV_RDMA_WITH_IMM:
@@ -3442,7 +3443,8 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 
 		for (i = 0; i < ne; i++) {
 			if(wc[i].status != IB_WC_SUCCESS)
-				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
+				printk(KERN_ALERT "%s: failed status (%d) %s for wr_id %d\n",
+					__func__, wc[i].status, ib_wc_status_msg(wc[i].status), (int) wc[i].wr_id);
 
 			if ((int) wc[i].opcode == IB_WC_RECV) {
 				char *addr;
@@ -3921,7 +3923,8 @@ int client_send_cq_poller(ltc *ctx)
 		{
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
-				printk(KERN_ALERT "%s: send request failed at id %llu as %d\n", __func__, wc[i].wr_id, wc[i].status);
+				printk(KERN_ALERT "%s: send request failed at id %llu %s as %d\n",
+					__func__, wc[i].wr_id, ib_wc_status_msg(wc[i].status), wc[i].status);
 			}
 			//else
 			//	printk(KERN_ALERT "%s: send request success at id %llu as %d\n", __func__, wc[i].wr_id, wc[i].status);
@@ -4022,45 +4025,49 @@ EXPORT_SYMBOL(__client_send_request);
  */
 int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
-       #ifdef SHARE_POLL_CQ_MODEL
+#ifdef SHARE_POLL_CQ_MODEL
 	while((*check)==SEND_REPLY_WAIT)
 	{
 		cpu_relax();
                 //schedule();
 	}
 	return 0;
-        #endif
-        #ifdef NON_SHARE_POLL_CQ_MODEL
+#endif
+
+	/*
+	 * Default config
+	 */
+#ifdef NON_SHARE_POLL_CQ_MODEL
         int ne, i;
 	struct ib_wc wc[2];
-        while(1)
-        {
+
+        while(1) {
                 do{
                         ne = ib_poll_cq(tar_cq, 1, wc);
-                        if(ne < 0)
-                        {
+                        if (ne < 0) {
                                 printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
                                 return 1;
                         }
+
                         if((*check)!=SEND_REPLY_WAIT)
                                 break;
-                }while(ne<1);
-		//test3 ends
-		//test4 starts (ends in liteapi_rdma_read_offset_userspace takes 15ns)
-                for(i=0;i<ne;i++)
-                {
+                } while (ne < 1);
+
+                for (i = 0; i < ne; i++) {
                         if(wc[i].status!=IB_WC_SUCCESS)
-                        {
-                                printk(KERN_ALERT "send request %lu failed as %d\n", (unsigned long)wc[i].wr_id, wc[i].status);
-                        }
+                                printk(KERN_ALERT "%s: send request %lu failed as %d %s\n",
+					__func__, (unsigned long)wc[i].wr_id,
+					wc[i].status, ib_wc_status_msg(wc[i].status));
+
                         if(wc[i].wr_id)
                                 *(int*)wc[i].wr_id = -wc[i].status;
                 }
+
                 if((*check)!=SEND_REPLY_WAIT)
                         break;
         }
 	return 0;
-        #endif
+#endif
 }
 EXPORT_SYMBOL(client_internal_poll_sendcq);
 
@@ -4830,7 +4837,8 @@ int client_rdma_write_with_imm(ltc *ctx, int connection_id, struct lmr_info *inp
 		{
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
-				printk(KERN_ALERT "%s: send request failed at connection %d as %d\n", __func__, connection_id, wc[i].status);
+				printk(KERN_ALERT "%s: send request failed at connection %d as %d %s\n",
+					__func__, connection_id, wc[i].status, ib_wc_status_msg(wc[i].status));
 				return 2;
 			}
 			else
@@ -4998,7 +5006,9 @@ int client_send_request_polling_only(ltc *ctx, int connection_id, int polling_nu
 		{
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
-				printk(KERN_ALERT "send request id:%d failed at connection %d as %d\n", (int)wc[i].wr_id, connection_id, wc[i].status);
+				printk(KERN_ALERT "%s send request id:%d failed at connection %d as %d %s\n",
+					__func__, (int)wc[i].wr_id, connection_id, wc[i].status,
+					ib_wc_status_msg(wc[i].status));
 			}
 		}
 		cur_num = cur_num - ne;
@@ -5119,7 +5129,8 @@ int client_fetch_and_add_loopback(ltc *ctx, struct lmr_info *input_mr, void *add
 		{
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
-				printk(KERN_ALERT "send request failed at loopback\n");
+				printk(KERN_ALERT "%s send request failed at loopback: %s\n",
+					__func__, ib_wc_status_msg(wc[i].status));
 				return 2;
 			}
 			else
@@ -5174,7 +5185,9 @@ int client_send_request_multiplesge(ltc *ctx, int connection_id, enum mode s_mod
 		{
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
-				printk(KERN_ALERT "send request failed at connection %d as %d\n", connection_id, wc[i].status);
+				printk(KERN_ALERT "%s send request failed at connection %d as %d %s\n",
+					__func__, connection_id, wc[i].status,
+					ib_wc_status_msg(wc[i].status));
 				return 2;
 			}
 			else
@@ -5315,7 +5328,8 @@ int client_compare_swp_loopback(ltc *ctx, struct lmr_info *remote_mr, void *addr
 		{
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
-				printk(KERN_CRIT "%s: send cmp request failed at loopback as %d\n", __func__, wc[i].status);
+				printk(KERN_CRIT "%s: send cmp request failed at loopback as %d %s\n",
+					__func__, wc[i].status, ib_wc_status_msg(wc[i].status));
 				return 2;
 			}
 			else
