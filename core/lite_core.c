@@ -2338,13 +2338,15 @@ int waiting_queue_handler(ltc *ctx)
 
 					//connection_id = client_get_connection_by_atomic_number(ctx, new_request->src_id, LOW_PRIORITY);
 
-					//addr = kmalloc(length * sizeof(char), GFP_KERNEL);//Modify from kzalloc to kmalloc
+					pr_info("%s(): Get alloc remote mr req\n", __func__);
 					addr = client_alloc_memory_for_mr(length*sizeof(char));
                                         if(addr)
                                         {
-						ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
-						tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
-						client_send_message_sge_UD(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY);
+        					ret_mr = client_ib_reg_mr(ctx, addr, length, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+        					tempaddr = client_ib_reg_mr_addr(ctx, ret_mr, sizeof(struct lmr_info));
+					pr_info("%s(): Get alloc remote mr req 1\n", __func__);
+        					client_send_message_sge_UD_tmp(ctx, new_request->src_id, MSG_GET_REMOTEMR_REPLY, (void *)tempaddr, sizeof(struct lmr_info), new_request->store_addr, new_request->store_semaphore, LOW_PRIORITY, ret_mr);
+					pr_info("%s(): Get alloc remote mr req 2\n", __func__);
                                         }
                                         else
                                         {
@@ -3882,7 +3884,7 @@ out:
 
 int client_send_message_sge_UD_tmp(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
 {
-	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, addr_kvaddr);
+	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, NULL);
 }
 EXPORT_SYMBOL(client_send_message_sge_UD_tmp);
 
