@@ -6197,11 +6197,28 @@ struct class *cl; // Global variable for the device class
 
 static int __init lite_internal_init_module(void)
 {
+	/*
+	 * We actually have workaround that can work:
+	 * Before every ib_dma_map_single(), we check if the passed virtual
+	 * address is vmalloc or module address. If so, do a vmalloc_to_pfn.
+	 *
+	 * But this eventually adds overhead to each datapath, which is not
+	 * worth it. To keep the original code, just make sure we are running
+	 * on a CONFIG_VMAP_STACK-disabled kernel.
+	 *
+	 *	- Yizhou
+	 */
+	if (IS_ENABLED(CONFIG_VMAP_STACK)) {
+		pr_info("**\n"
+			"** Error\n"
+			"**    LITE currently can NOT run on virtually mapped kernel stacks.\n"
+			"**    Please disable CONFIG_VMAP_STACK and re-compile your kernel.\n"
+			"**\n");
+		return -EFAULT;
+	}
+
         Connected_Ctx = (ltc **)kmalloc(sizeof(ltc*)*MAX_LITE_NUM, GFP_KERNEL);
         atomic_set(&Connected_LITE_Num, 0);
-
-
-	//lite_dev = register_chrdev(0,"lite_mmaptest",&lite_mmaptest_fops);
 
 	if (alloc_chrdev_region(&lite_dev_num, 0, 1, "lite_internal") < 0)
 	{

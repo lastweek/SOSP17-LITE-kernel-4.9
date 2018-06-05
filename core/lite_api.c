@@ -97,6 +97,7 @@ static void ibv_add_one(struct ib_device *device)
 
 	liteapi_dev = device;
 
+	/* why allocating pd here?? */
 	ctx_pd = ib_alloc_pd(device, IB_PD_UNSAFE_GLOBAL_RKEY	|
 				     IB_ACCESS_LOCAL_WRITE	|
 				     IB_ACCESS_REMOTE_READ	|
