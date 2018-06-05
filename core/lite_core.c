@@ -3884,7 +3884,7 @@ out:
 
 int client_send_message_sge_UD_tmp(ltc *ctx, int target_node, int type, void *addr, int size, uint64_t store_addr, uint64_t store_semaphore, int priority, void *addr_kvaddr)
 {
-	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, NULL);
+	return __client_send_message_sge_UD(ctx, target_node, type, addr, size, store_addr, store_semaphore, priority, addr_kvaddr);
 }
 EXPORT_SYMBOL(client_send_message_sge_UD_tmp);
 
@@ -3942,71 +3942,67 @@ int client_send_cq_poller(ltc *ctx)
  * @offset: remote offset
  * @userspace_flag: distinguish this request is from kernel space or userspace
  * @poll_addr: shared memory space to improve polling efficiency
+ *
+ * HACK!!!
+ * This function is used to send RDMA-Read or RDMA-Write.
+ * It is not SEND.
  */
-int client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int offset, int userspace_flag, int *poll_addr)
+int client_send_request(ltc *ctx, int connection_id, enum mode s_mode,
+			struct lmr_info *input_mr, void *addr, int size,
+			int offset, int userspace_flag, int *poll_addr)
 {
 	struct ib_rdma_wr rdma_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
 	struct ib_sge sge;
-	//struct lmr_info *ret;
 	int ret;
 	uintptr_t tempaddr;
 	int poll_status = SEND_REPLY_WAIT;
 
-	//#ifdef NON_SHARE_POLL_CQ_MODEL
-        //spin_lock(&connection_lock[connection_id]);
-        //#endif
-
-	retry_send_request:
+retry_send_request:
 	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
+	/* Fill generic send_wr */
 	wr = &rdma_wr.wr;
 	wr->wr_id = (uint64_t)&poll_status;
-        if(poll_addr)
+        if (poll_addr)
                 wr->wr_id = (uint64_t)poll_addr;
 	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 	wr->send_flags = IB_SEND_SIGNALED;
-	//wr.send_flags = 0;
 
+	/* Remote memory info */
 	rdma_wr.remote_addr = (uintptr_t) (input_mr->addr+offset);
 	rdma_wr.rkey = input_mr->rkey;
-	if(userspace_flag)
-	{
+
+	/*
+	 * Why?
+	 */
+	if (userspace_flag)
 		sge.addr = (uintptr_t)addr;
-	}
-	else
-	{
+	else {
 		tempaddr = client_ib_reg_mr_addr(ctx, addr, size);
 		sge.addr = tempaddr;
 	}
+
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
 
-	//test2 ends
-	lite_dp("ib_post_send %d", 0);
+	lite_dp("ib_post_send: userspace_flag=%d poll_addr=%p sge[addr=%#llx, len=%#x]",
+		userspace_flag, poll_addr, sge.addr, sge.length);
+
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
-	//test3 starts (ends in client_internal_poll_sendcq) takes 4973ns for 4K read, and takes 1989ns for 8B read
-	if(!ret)
-	{
-                if(!poll_addr)
-                {
+	if (!ret) {
+                if (!poll_addr) {
 			client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
-			if(poll_status)
+			if (poll_status)
 				goto retry_send_request;
                 }
-	}
-	else
-	{
+	} else
 		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
-	}
 
-        //#ifdef NON_SHARE_POLL_CQ_MODEL
-	//spin_unlock(&connection_lock[connection_id]);
-        //#endif
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(client_send_request);
 
