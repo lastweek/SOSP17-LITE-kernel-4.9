@@ -3850,8 +3850,8 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
 
-	pr_info("%s(): sge[0] addr: %#llx len:%#x lkey %#x \n", __func__, sge[0].addr, sge[0].length, sge[0].lkey);
-	pr_info("%s(): sge[1] addr: %#llx len:%#x lkey %#x \n", __func__, sge[1].addr, sge[1].length, sge[1].lkey);
+	lite_dp("sge[0] addr: %#llx len:%#x lkey %#x", sge[0].addr, sge[0].length, sge[0].lkey);
+	lite_dp("sge[1] addr: %#llx len:%#x lkey %#x", sge[1].addr, sge[1].length, sge[1].lkey);
 
 	ret = ib_post_send(ctx->qpUD, wr, &bad_wr);
 	if (ret == 0) {
@@ -3875,9 +3875,9 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 		}
 	} else
 		lite_err("post_send fail at UD ret=%d", ret);
-	spin_unlock(&ctx->connection_lockUD);
 
 out:
+	spin_unlock(&ctx->connection_lockUD);
 	kfree(output_header);
 	if (addr_kvaddr)
 		kfree(tmp_addr);
