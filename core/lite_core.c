@@ -1006,7 +1006,7 @@ inline uintptr_t client_ib_reg_mr_addr(ltc *ctx, void *addr, size_t length)
 	ret = ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL);
 
 #if 1
-	pr_info("%s(): (%s) kvaddr: %p pa: %#llx len:%zu dma_addr: %#llx\n",
+	lite_dp("%s(): (%s) kvaddr: %p pa: %#llx len:%zu dma_addr: %#llx\n",
 		__func__, ((struct ib_device *)ctx->context)->name,
 		addr, virt_to_phys(addr), length, ret);
 #endif
