@@ -17,7 +17,7 @@
  *
  *      - Redistributions in binary form must reproduce the above
  *        copyright notice, this list of conditions and the following
- *        
+ *
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
@@ -163,7 +163,7 @@ static struct lite_context *server_init_ctx(struct ibv_device *ib_dev,int size,i
 			ibv_get_device_name(ib_dev));
 		goto clean_buffer;
 	}
-    
+
         ctx->channel = NULL;
 
 	ctx->pd = ibv_alloc_pd(ctx->context);
@@ -174,7 +174,7 @@ static struct lite_context *server_init_ctx(struct ibv_device *ib_dev,int size,i
 
 	ctx->send_state = (enum s_state *)malloc(num_connections * sizeof(enum s_state));
 	ctx->recv_state = (enum r_state *)malloc(num_connections * sizeof(enum r_state));
-    
+
         //Built by Shin-Yeh
         ctx->num_alive_connection = (int*)calloc(ctx->num_node, sizeof(int));
         //ctx->recv_num = (int *)calloc(num_connections, sizeof(int));
@@ -182,7 +182,7 @@ static struct lite_context *server_init_ctx(struct ibv_device *ib_dev,int size,i
         ctx->atomic_request_num = (unsigned int*)calloc(ctx->num_node, sizeof(unsigned int));
         ctx->thread_state = (enum t_state *)malloc(MAX_PARALLEL_THREAD * sizeof(enum t_state));
         ctx->parallel_thread_num = 0;
-        
+
         //Send_Reply
         ctx->send_reply_wait_num = 0;
 
@@ -197,20 +197,20 @@ static struct lite_context *server_init_ctx(struct ibv_device *ib_dev,int size,i
         ctx->shared_locks_fifo_queue = (struct fifo_t **)malloc(MAX_LOCK * sizeof(struct fifo_t *));
         for(i=0;i<MAX_LOCK;i++)
                 ctx->shared_locks_fifo_queue[i] = fifo_new();
-  
+
         //This part should be modified in the future to satisfie multiple CQ
 	ctx->cq = ibv_create_cq(ctx->context, rx_depth + 1, NULL, ctx->channel, 0);
 	if (!ctx->cq) {
 		fprintf(stderr, "Couldn't create CQ\n");
 		goto clean_mr;
 	}
-	
-	/*ctx->qp = (struct ibv_qp **)malloc(num_connections * sizeof(struct ibv_qp *)); 
+
+	/*ctx->qp = (struct ibv_qp **)malloc(num_connections * sizeof(struct ibv_qp *));
 	if (!ctx->pd)
 		goto clean_qp;*/
 
 	struct ibv_qp_attr attr;
-	struct ibv_qp_init_attr init_attr = 
+	struct ibv_qp_init_attr init_attr =
 	{
 		.send_cq = ctx->cq,
 		.recv_cq = ctx->cq,
@@ -223,7 +223,7 @@ static struct lite_context *server_init_ctx(struct ibv_device *ib_dev,int size,i
 		.qp_type = IBV_QPT_UD
 	};
 
- 	ctx->qp = ibv_create_qp(ctx->pd, &init_attr);
+	ctx->qp = ibv_create_qp(ctx->pd, &init_attr);
 	if(!ctx->qp)
 	{
 		fprintf(stderr, "Failed to build UD QP\n");
@@ -335,18 +335,18 @@ static int server_post_receives_message(int n, int num)
                         temp_addr = malloc(RDMA_BUFFER_SIZE*2);
                         temp_mr = server_register_memory_api(0, temp_addr, RDMA_BUFFER_SIZE*2, IBV_ACCESS_LOCAL_WRITE);
                         temp_header_addr = malloc(sizeof(struct liteapi_header)+40);
-                        temp_header_mr = server_register_memory_api(0, temp_header_addr, sizeof(struct liteapi_header)+40, IBV_ACCESS_LOCAL_WRITE);          
+                        temp_header_mr = server_register_memory_api(0, temp_header_addr, sizeof(struct liteapi_header)+40, IBV_ACCESS_LOCAL_WRITE);
                         p_r_i_struct = malloc(sizeof(struct liteapi_post_receive_intermediate_struct));
                         p_r_i_struct->header = (uintptr_t)temp_header_addr;
                         p_r_i_struct->msg = (uintptr_t)temp_addr;
-          
+
                         sge[0].addr = (uintptr_t)temp_header_mr->addr;
                         sge[0].length = temp_header_mr->length;
                         sge[0].lkey = temp_header_mr->lkey;
                         sge[1].addr = (uintptr_t)temp_mr->addr;
                         sge[1].length = temp_mr->length;
                         sge[1].lkey = temp_mr->lkey;
-         
+
                         wr.wr_id = (uint64_t)p_r_i_struct;
                         wr.next = NULL;
                         wr.sg_list = sge;
@@ -374,7 +374,7 @@ int server_send_message_sge(int target_node, int type, struct ibv_mr *input_mr, 
 {
         pthread_mutex_lock(&connection_lock);
         struct ibv_send_wr wr, *bad_wr = NULL;
-    
+
         int ret;
         int waiting_id = server_get_waiting_id_by_semaphore();
         memset(&wr, 0, sizeof(wr));
@@ -406,8 +406,8 @@ int server_send_message_sge(int target_node, int type, struct ibv_mr *input_mr, 
         sge[1].length = input_mr->length;
         sge[1].lkey = input_mr->lkey;
 
-        //ret = ibv_post_send(ctx->qp[connection_id], &wr, &bad_wr);   
-        ret = ibv_post_send(ctx->qp, &wr, &bad_wr);   
+        //ret = ibv_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+        ret = ibv_post_send(ctx->qp, &wr, &bad_wr);
 
         while(ctx->thread_state[waiting_id] == TS_WAIT);
         pthread_mutex_unlock(&connection_lock);
@@ -444,8 +444,8 @@ int server_send_message_sge_header_fixed(int target_node, int type, struct ibv_m
         sge[1].length = input_mr->length;
         sge[1].lkey = input_mr->lkey;
 
-        //ret = ibv_post_send(ctx->qp[connection_id], &wr, &bad_wr);   
-        ret = ibv_post_send(ctx->qp, &wr, &bad_wr);   
+        //ret = ibv_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+        ret = ibv_post_send(ctx->qp, &wr, &bad_wr);
 
         while(ctx->thread_state[waiting_id] == TS_WAIT);
         pthread_mutex_unlock(&connection_lock);
@@ -455,12 +455,12 @@ int server_send_message_sge_header_fixed(int target_node, int type, struct ibv_m
 int server_setup_loopback_connections(struct ibv_device *ib_dev,int size,int rx_depth, int port)
 {
         struct lite_dest loopback_in, loopback_out;
-        char	        		 gid[33];
+        char				 gid[33];
         //This part is related to loopback_cq
         ctx->loopback_cq = ibv_create_cq(ctx->context, rx_depth + 1, NULL, ctx->channel, 0);
         if (!ctx->loopback_cq) {
 		fprintf(stderr, "Couldn't create loopback_CQ\n");
-        }    
+        }
         {
                 struct ibv_qp_attr attr;
 		struct ibv_qp_init_attr init_attr = {
@@ -479,7 +479,7 @@ int server_setup_loopback_connections(struct ibv_device *ib_dev,int size,int rx_
 		ctx->loopback_in = ibv_create_qp(ctx->pd, &init_attr);
 		if (!ctx->loopback_in)  {
 			fprintf(stderr, "Couldn't create loopback in QP\n");
-			
+
 		}
 		ibv_query_qp(ctx->loopback_in, &attr, IBV_QP_CAP, &init_attr);
 		if (init_attr.cap.max_inline_data >= size) {
@@ -502,7 +502,7 @@ int server_setup_loopback_connections(struct ibv_device *ib_dev,int size,int rx_
 				  IBV_QP_PORT               |
 				  IBV_QP_ACCESS_FLAGS)) {
 			fprintf(stderr, "Failed to modify loopback in QP to INIT\n");
-			ibv_destroy_qp(ctx->loopback_in);			
+			ibv_destroy_qp(ctx->loopback_in);
 		}
         }
         {
@@ -548,7 +548,7 @@ int server_setup_loopback_connections(struct ibv_device *ib_dev,int size,int rx_
 			ibv_destroy_qp(ctx->loopback_out);
 		}
 	}
-    
+
         memset(&loopback_in, 0, sizeof(struct lite_dest));
         loopback_in.lid = ctx->portinfo.lid;
         loopback_in.qpn = ctx->loopback_in->qp_num;
@@ -567,18 +567,18 @@ int server_setup_loopback_connections(struct ibv_device *ib_dev,int size,int rx_
         memcpy(&loopback_out.gid, &ctx->gid, sizeof(union ibv_gid));
 	inet_ntop(AF_INET6, &loopback_out.gid, gid, sizeof gid);
 	printf("  local address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x, GID %s\n", loopback_out.lid, loopback_out.qpn, loopback_out.psn, gid);
-    
-        if (server_connect_loopback(ctx->loopback_in, port, loopback_in.psn, mtu, sl, &loopback_out)) 
+
+        if (server_connect_loopback(ctx->loopback_in, port, loopback_in.psn, mtu, sl, &loopback_out))
         {
                 fprintf(stderr, "Couldn't connect to loopback out\n");
                 die("EXIT during connect QP");
         }
-        if (server_connect_loopback(ctx->loopback_out, port, loopback_out.psn, mtu, sl, &loopback_in)) 
+        if (server_connect_loopback(ctx->loopback_out, port, loopback_out.psn, mtu, sl, &loopback_in))
         {
                 fprintf(stderr, "Couldn't connect to loopback in\n");
                 die("EXIT during connect QP");
         }
-    
+
         debug_printf("loopback create successfully \n");
         return 0;
 }
@@ -591,7 +591,7 @@ int server_init_interface(int ib_port)
 	int                    size = 4096;
 	int                    rx_depth = RECV_DEPTH;
 	int		       i;
-        
+
         mtu = LITE_MTU;
 	sl = 0;
 	routs = (int *)malloc(MAX_CONNECTION * sizeof(int));
@@ -603,7 +603,7 @@ int server_init_interface(int ib_port)
 	srand48(getpid() * time(NULL));
 
 	page_size = sysconf(_SC_PAGESIZE);
-	
+
         rcnt = 0;//How many items you are going to receive
 	scnt = 0;//How many items you are going to send
 
@@ -620,7 +620,14 @@ int server_init_interface(int ib_port)
         struct ibv_context *t_context;
         struct ibv_device_attr device_attr;
         int rc;
+
         t_context = ibv_open_device(ib_dev);
+	if (!t_context) {
+		fprintf(stderr, "%s() Couldn't get context for %s\n",
+			__func__, ibv_get_device_name(ib_dev));
+		exit(-1);
+	}
+
         rc = ibv_query_device(t_context, &device_attr);
         if(!rc)
                 printf("max qp %d\n", device_attr.max_qp);
@@ -646,7 +653,7 @@ int server_init_interface(int ib_port)
 }
 
 int server_get_send_reply_id_by_semaphore()
-{   
+{
         int ret;
         sem_wait(&send_reply_wait_semaphore);
         pthread_mutex_lock(&send_reply_wait_mutex);
@@ -676,7 +683,7 @@ int server_get_connection_by_atomic_number(int target_node, int priority)
 }
 
 int server_get_waiting_id_by_semaphore(void)
-{   
+{
         int ret;
         sem_wait(&get_thread_waiting_number_semaphore);
         pthread_mutex_lock(&get_thread_waiting_number_mutex);
@@ -727,31 +734,31 @@ int server_keep_server_alive(void *ptr)
         int ret;
         int listen_fd;
         int connection_fd;
-        
+
         struct liteapi_two_ports *init_ports;
         init_ports = (struct liteapi_two_ports *)ptr;
         //int ib_port = *(int*)ptr;
         int ib_port = init_ports->ib_port;
         int ethernet_port = init_ports->ethernet_port;
-        
+
         struct sockaddr_in myaddr;
         struct sockaddr_in remoteaddr;
         int addrlen = sizeof(remoteaddr);
         char remoteIP[INET_ADDRSTRLEN];
         char recv_buf[sizeof LID_SEND_RECV_FORMAT];
         char send_buf[sizeof LID_SEND_RECV_FORMAT];
-        char	        		 gid[33];
+        char				 gid[33];
         //int			             gidx = -1;
         //char output_buf[SEND_BUF_LENGTH];
 
         struct server_reply_format server_reply;
         memset(&server_reply, 0, sizeof(struct server_reply_format));
-        
+
         int cur_node = 1;//0 is server itself
         //int ask_number_of_MR_set = ctx->num_node * ctx->num_parallel_connection;
         int ask_number_of_MR_set = FIRST_ASK_MR_SET * ctx->num_parallel_connection;
         int i,j;
-        
+
         //Initialize Configuration
         memset(&myaddr, 0, sizeof(struct sockaddr_in));
         memset(&remoteaddr, 0, sizeof(struct sockaddr_in));
@@ -761,7 +768,7 @@ int server_keep_server_alive(void *ptr)
         myaddr.sin_family       = AF_INET;
         myaddr.sin_port         = htons(ethernet_port);
         myaddr.sin_addr.s_addr  = htonl(INADDR_ANY);
-    
+
         //Bind socket and start listen
         listen_fd = socket(AF_INET, SOCK_STREAM, 0);
         if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
@@ -780,9 +787,9 @@ int server_keep_server_alive(void *ptr)
         ret = listen(listen_fd, LISTEN_BACKLOG);
         struct client_data loop_cache;
         memset(&loop_cache, 0, sizeof(struct client_data));
-        
+
         server_post_receives_message(1, ctx->rx_depth);
-        
+
         while(1)
         {
                 //Get local LID information and prepare to send
@@ -792,9 +799,9 @@ int server_keep_server_alive(void *ptr)
                 struct ibv_ah_attr ah_attr;
                 //Connect with the remote side
                 connection_fd = accept(listen_fd, (struct sockaddr *)&remoteaddr, &addrlen);
-        
+
                 inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN);
-                
+
                 //Prepare the local side IB configuration, refer to liteapi_establish_connection
                 debug_printf("IB Preparation for the incoming %d connection from %s\n", cur_node,remoteIP);
                 /*
@@ -817,7 +824,7 @@ int server_keep_server_alive(void *ptr)
                         die("SEND require MR number ERROR");
                         return 3;
                 }
-                
+
                 for(i=0;i<ask_number_of_MR_set;i++)
                 {
                         ret = read(connection_fd, &recv_buf, sizeof(recv_buf));
@@ -829,17 +836,17 @@ int server_keep_server_alive(void *ptr)
                         //debug_printf("%d %s\n", i, recv_buf);
                         memcpy(loop_cache.server_information_buffer[i], recv_buf, ret);
                 }
-                
+
                 debug_printf("Get Connection from %s: %s\n", remoteIP, loop_cache.server_information_buffer[0]);
-                
-                
+
+
                 memcpy(loop_cache.server_name, remoteIP, strlen(remoteIP));
                 memcpy(&server_reply.client_list[cur_node], &loop_cache, sizeof(struct client_data));
-                
+
                 //Send the local connection information to the remote side
                 ret = write(connection_fd, &ctx->ah_attrUD[0], sizeof(struct client_ah_combined));
                 ret = read(connection_fd, &ctx->ah_attrUD[cur_node], sizeof(struct client_ah_combined));
-        	memset(&ah_attr, 0, sizeof(struct ibv_ah_attr));
+		memset(&ah_attr, 0, sizeof(struct ibv_ah_attr));
 
                 ah_attr.dlid          = ctx->ah_attrUD[cur_node].dlid;
                 ah_attr.sl                = 0;
@@ -878,20 +885,20 @@ int server_keep_server_alive(void *ptr)
                                 ret_mr_1 = server_register_memory_api(connection_id_1, &server_reply.client_list[i].server_information_buffer[new_connection_source], sizeof(LID_SEND_RECV_FORMAT), IBV_ACCESS_LOCAL_WRITE);
                                 //debug_printf("send %s to %d via %d\n", server_reply.client_list[i].server_information_buffer[new_connection_source], new_connection_source, connection_id_1);
                                 server_send_message_sge(cur_node, MSG_NODE_JOIN, ret_mr_1, 0, 0);
-                                
+
                                 //memcpy(ctx->send_msg[new_connection_target]->data.newnode_msg, server_reply.client_list[cur_node].server_information_buffer[new_connection_target], sizeof(LID_SEND_RECV_FORMAT));
                                 //server_send_message(new_connection_target, MSG_NODE_JOIN);
-                                
+
                                 int connection_id_2 = new_connection_target;//server_get_connection_by_atomic_number(new_connection_target);
                                 struct ibv_mr *ret_mr_2;
                                 ret_mr_2 = server_register_memory_api(connection_id_2, &server_reply.client_list[cur_node].server_information_buffer[new_connection_target], sizeof(LID_SEND_RECV_FORMAT), IBV_ACCESS_LOCAL_WRITE);
                                 server_send_message_sge(i, MSG_NODE_JOIN, ret_mr_2, 0, 0);
-                                
+
                                 //debug_printf("send %s to %d\n", server_reply.client_list[cur_node].server_information_buffer[new_connection_target], new_connection_target);
                                 usleep(1000);
                         }
                 }
-                
+
                 memset(&loop_cache, 0, sizeof(struct client_data));
                 memset(recv_buf, 0, sizeof LID_SEND_RECV_FORMAT);
                 memset(send_buf, 0, sizeof LID_SEND_RECV_FORMAT);
@@ -924,12 +931,12 @@ int handle_atomic_send(struct atomic_struct *input_list, int length, char *ret, 
 int server_reply_ask_lock_request(struct send_and_reply_format *ptr)
 {
         int target_lock;
-        
+
         struct ibv_mr *output_mr;
         int connection_id;
         target_lock = *(ptr->msg);
         pthread_mutex_lock(&num_lock_mutex);
-        
+
         pthread_mutex_unlock(&num_lock_mutex);
         connection_id = server_get_connection_by_atomic_number(ptr->src_id, HIGH_PRIORITY);
         if(target_lock<ctx->num_used_lock)
@@ -952,7 +959,7 @@ int server_reply_create_lock_request(struct send_and_reply_format *ptr)
         struct ibv_mr *ret_mr, *output_mr;
         //struct lmr_info send_mr;
         pthread_mutex_lock(&num_lock_mutex);
-        
+
         //ret_mr = server_register_memory_api(connection_id, &ctx->shared_locks[2], sizeof(uint64_t), IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_ATOMIC);
         //ctx->shared_locks[2]=(uint64_t)LOCK_USED;
         ret_mr = server_register_memory_api(0, (void *)&shared_locks[ctx->num_used_lock], sizeof(uint64_t), IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_ATOMIC);
@@ -977,7 +984,7 @@ int server_reply_create_lock_request(struct send_and_reply_format *ptr)
         server_send_message_sge(ptr->src_id, MSG_CREATE_LOCK_REPLY, output_mr, ptr->store_addr, ptr->store_semaphore);
         free(ptr->msg);
         free(ptr);
-        
+
         ctx->num_used_lock++;
         pthread_mutex_unlock(&num_lock_mutex);
         return 0;
@@ -1014,7 +1021,7 @@ int server_reply_atomic_send_request(struct send_and_reply_format *ptr)
         return 0;
 }
 int server_reply_remote_mr_request(struct send_and_reply_format *ptr)
-{        
+{
         int connection_id = server_get_connection_by_atomic_number(ptr->src_id, 0);
         void *addr;
         struct ibv_mr *ret_mr, *output_mr;
@@ -1048,7 +1055,7 @@ int server_find_qp_id_by_qpnum(uint32_t qp_num)
 }
 int server_lock_handling(void)
 {
-        
+
         int num_lock;
         int i, connection_id;
         unsigned long long int assigned_num, readlock_num;
@@ -1060,23 +1067,23 @@ int server_lock_handling(void)
         unsigned long long int ret;
         struct liteapi_header output_header;
         struct ibv_mr *output_header_mr;
-        
+
         output_header_mr = server_register_memory_api(connection_id, &output_header, sizeof(struct liteapi_header), IBV_ACCESS_LOCAL_WRITE);
-        
+
         assigned_mr = server_register_memory_api(0, &assigned_num, sizeof(uint64_t), IBV_ACCESS_LOCAL_WRITE);
         //assigned_c_mr.length = assigned_mr->length;
         //assigned_c_mr.rkey = assigned_mr->rkey;
         //assigned_c_mr.lkey = assigned_mr->lkey;
         //assigned_c_mr.addr = assigned_mr->addr;
         //assigned_c_mr.node_id = NODE_ID;
-        
+
         readlock_mr = server_register_memory_api(0, &readlock_num, sizeof(uint64_t), IBV_ACCESS_LOCAL_WRITE);
         readlock_c_mr.length = readlock_mr->length;
         readlock_c_mr.rkey = readlock_mr->rkey;
         readlock_c_mr.lkey = readlock_mr->lkey;
         readlock_c_mr.addr = readlock_mr->addr;
         readlock_c_mr.node_id = NODE_ID;
-        
+
         while(1)
         {
                 pthread_mutex_lock(&num_lock_mutex);
@@ -1111,7 +1118,7 @@ int server_lock_handling(void)
                                 connection_id = server_get_connection_by_atomic_number(ptr->src_id, HIGH_PRIORITY);
                                 //assigned_num=(uint64_t)LOCK_ASSIGNED;
                                 assigned_num=(uint64_t)LOCK_LOCK;
-                                
+
                                 ret = server_loopback_compare_swp(&ctx->shared_locks_mr[i], &readlock_c_mr, (uint64_t)readlock_num, assigned_num);
                                 if(ret)
                                         printf("2-Lock assigned fail in queue %d\n", i);
@@ -1132,7 +1139,7 @@ int server_lock_handling(void)
                                         ptr = (struct send_and_reply_format *)fifo_remove(ctx->shared_locks_fifo_queue[i]);
                                         pthread_mutex_unlock(&fifo_lock_mutex);
                                         connection_id = server_get_connection_by_atomic_number(ptr->src_id, HIGH_PRIORITY);
-                                        
+
                                         server_setup_liteapi_header(NODE_ID, ptr->store_addr, ptr->store_semaphore, assigned_mr->length, 0, MSG_ASSIGN_LOCK, &output_header);
                                         server_send_message_sge_header_fixed(ptr->src_id, MSG_ASSIGN_LOCK, assigned_mr, ptr->store_addr, ptr->store_semaphore, output_header_mr);
                                         free(ptr);
@@ -1142,7 +1149,7 @@ int server_lock_handling(void)
                         }
                         else
                                 pthread_mutex_unlock(&fifo_lock_mutex);
-                        
+
                 }
         }
         return 0;
@@ -1153,7 +1160,7 @@ int server_poll_cq(struct ibv_cq *target_cq)
         int ne, i;
 
         int connection_id, waiting_id;
-	while (1) 
+	while (1)
         {
                 do {
                         ne = ibv_poll_cq(target_cq, 1, wc);
@@ -1162,7 +1169,7 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                 return 1;
                         }
                 } while (ne < 1);
-                for (i = 0; i < ne; ++i) 
+                for (i = 0; i < ne; ++i)
                 {
 
                         if (wc[i].status != IBV_WC_SUCCESS) {
@@ -1173,9 +1180,9 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                 return 2;
                         }
 
-                        if ((int) wc[i].opcode == IBV_WC_RECV) 
+                        if ((int) wc[i].opcode == IBV_WC_RECV)
                         {
-                                
+
                                 struct liteapi_post_receive_intermediate_struct *p_r_i_struct = (struct liteapi_post_receive_intermediate_struct*)wc[i].wr_id;
                                 struct liteapi_header *header_addr;
 		struct liteapi_header temp_header;
@@ -1189,7 +1196,7 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                 ctx->recv_num++;
                                 type = header_addr->type;
                                 if (type == MSG_CLIENT_SEND)
-                                {	
+                                {
                                         ctx->send_handler(addr, header_addr->length);
                                 }
                                 else if(type == MSG_GET_SEND_AND_REPLY_1)
@@ -1204,7 +1211,7 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                         recv->msg = addr;
                                         printf("MSG_GET_SEND_AND_REPLY_1 from %d\n", recv->src_id);
                                         pthread_create(&thread_reply_send_request, NULL, (void *)server_reply_send_request, recv);
-		//	server_reply_send_request(recv);	
+		//	server_reply_send_request(recv);
                                         free(header_addr);
                                 }
                                 else if(type == MSG_GET_REMOTEMR)
@@ -1285,14 +1292,14 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                 {
                                         pthread_t thread_reply_create_lock_request;
                                         struct send_and_reply_format *recv;
-                                        
+
                                         recv = malloc(sizeof(struct send_and_reply_format));
                                         recv->src_id = header_addr->src_id;
                                         recv->store_addr = header_addr->store_addr;
                                         recv->store_semaphore = header_addr->store_semaphore;
                                         recv->length = header_addr->length;
                                         recv->msg = addr;
-                                        
+
                                         pthread_create(&thread_reply_create_lock_request, NULL, (void *)server_reply_create_lock_request, recv);
                                         free(header_addr);
                                 }
@@ -1307,14 +1314,14 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                         recv->store_addr = header_addr->store_addr;
                                         recv->store_semaphore = header_addr->store_semaphore;
                                         recv->length = header_addr->length;
-                                        
+
                                         temp=(struct lmr_info *)addr;
                                         //transform the lock address into lock id
                                         tar_lock_id = ((uint64_t)temp->addr-(uint64_t)&shared_locks[0]) / sizeof(uint64_t);
                                         pthread_mutex_lock(&fifo_lock_mutex);
                                         fifo_add(ctx->shared_locks_fifo_queue[tar_lock_id], (void *)recv);
                                         pthread_mutex_unlock(&fifo_lock_mutex);
-                                        
+
                                         free(addr);
                                         free(header_addr);
                                 }
@@ -1328,7 +1335,7 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                         recv->store_semaphore = header_addr->store_semaphore;
                                         recv->length = header_addr->length;
                                         recv->msg = addr;
-                                        
+
                                         pthread_create(&thread_reply_ask_lock_request, NULL, (void *)server_reply_ask_lock_request, recv);
                                         free(header_addr);
                                 }
@@ -1367,21 +1374,21 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                         ctx->thread_state[waiting_id]=TS_DONE;
                                 }
                                 else if(type == MSG_SERVER_SEND)
-                                {                                        
+                                {
                                         ctx->thread_state[waiting_id]=TS_DONE;
                                 }
                                 else if(type == MSG_NODE_JOIN || type == MSG_NODE_JOIN_UD)
-                                {        
+                                {
                                         ctx->thread_state[waiting_id]=TS_DONE;
                                 }
                                 else if (type == MSG_GET_REMOTEMR)
                                 {
-                                        
+
                                         ctx->thread_state[waiting_id]=TS_DONE;
                                 }
                                 else if (type == MSG_GET_REMOTEMR_REPLY)
                                 {
-                                        
+
                                         ctx->thread_state[waiting_id]=TS_DONE;
                                 }
                                 else if (type == MSG_GET_ATOMIC_START)
@@ -1432,7 +1439,7 @@ int server_poll_cq(struct ibv_cq *target_cq)
                                 connection_id =  (int) wc[i].wr_id % WRAP_UP_NUM_FOR_WRID;
                                 waiting_id = (int) (wc[i].wr_id % WRAP_UP_NUM_FOR_TYPE)/ WRAP_UP_NUM_FOR_WRID;
                                 debug_printf("RDMA_WRITE %d %ddone\n", connection_id, waiting_id);
-                                
+
                                 ctx->thread_state[waiting_id]=TS_DONE;
                         }
                         else
@@ -1446,15 +1453,15 @@ int server_poll_cq(struct ibv_cq *target_cq)
 
 	return 0;
 }
-int liteapi_init(int ib_port, int ethernet_port, int option){
-         
+
+int liteapi_init(int ib_port, int ethernet_port, int option)
+{
         server_init_interface(ib_port);
         ctx->send_handler = send_handle;
         ctx->send_reply_handler = handle_send_reply;
         ctx->atomic_send_handler = handle_atomic_send;
-        
+
         //Setup server side Ethernet configuration
-        //Now, I am using a naive server/client connection model. This could be modified into select/fork/thread model in the future
         int i;
         int ret;
         struct liteapi_two_ports init_port;
@@ -1474,8 +1481,8 @@ int liteapi_init(int ib_port, int ethernet_port, int option){
         }*/
         ret = pthread_mutex_init(&connection_lock, NULL);
         if(ret!=0)
-        	die("mutex error");
-        
+		die("mutex error");
+
         ret = sem_init(&get_thread_waiting_number_semaphore, 0, MAX_PARALLEL_THREAD);
         if(ret!=0)
                 die("semaphore error while creating\n");
@@ -1484,35 +1491,35 @@ int liteapi_init(int ib_port, int ethernet_port, int option){
                 die("semaphore error while creating\n");
         ret = pthread_mutex_init(&send_reply_wait_mutex, NULL);
         if(ret!=0)
-                die("mutex error while creating\n");        
-                
+                die("mutex error while creating\n");
+
         ret = pthread_mutex_init(&num_lock_mutex, NULL);
         if(ret!=0)
-                die("mutex error while creating num_lock_mutex\n");        
-        
+                die("mutex error while creating num_lock_mutex\n");
+
         ret = pthread_mutex_init(&fifo_lock_mutex, NULL);
         if(ret!=0)
-                die("mutex error while creating fifo_lock_mutex\n");        
-                
-        
+                die("mutex error while creating fifo_lock_mutex\n");
+
+
         if(MAX_NODE*NUM_PARALLEL_CONNECTION >=WRAP_UP_NUM_FOR_WRID)
         {
                 die("MAX_NODE * NUM_PARALLEL_CONNECTION is larger than WRAP_UP_NUM_FOR_WRID, please modify it\n");
         }
-        
+
         ctx->ah_attrUD[0].qpn = ctx->qp->qp_num;
         ctx->ah_attrUD[0].node_id = 0;
         ctx->ah_attrUD[0].qkey = 0x336;
         ctx->ah_attrUD[0].dlid = ctx->portinfo.lid;
 	memcpy(&ctx->ah_attrUD[0].gid, &ctx->gid, sizeof(union ibv_gid));
-        
+
         pthread_t                           thread_server;
         pthread_create(&thread_server, NULL, (void *)&server_keep_server_alive, &init_port);
         pthread_t                           thread_poll_cq;
         struct ibv_cq *target_cq;
         target_cq = ctx->cq;
         pthread_create(&thread_poll_cq, NULL, (void *)&server_poll_cq, target_cq);
-        
+
         //Comment-out lock handling
         #ifndef NO_LOCK_IMPLEMENTATION
         if(option == 0)
@@ -1529,7 +1536,7 @@ int server_get_remotemr(int target_node, void *addr, int size, struct lmr_info *
         int connection_id = server_get_connection_by_atomic_number(target_node, 0);
         struct ibv_mr *output_mr;
         int request_size = size;
-        
+
         wait_send_reply_id = SEND_REPLY_WAIT;
         output_mr = server_register_memory_api(connection_id, &request_size, sizeof(int), IBV_ACCESS_LOCAL_WRITE);
         server_send_message_sge(target_node, MSG_GET_REMOTEMR, output_mr, (uint64_t)ret_mr, (uint64_t)&wait_send_reply_id);
@@ -1552,12 +1559,12 @@ int server_rdma_read(int target_node, struct lmr_info *mr_addr, void *local_addr
 
 int server_loopback_compare_swp(struct lmr_info *remote_mr, struct lmr_info *local_mr, unsigned long long guess_value, unsigned long long swp_value)
 {
-        
+
         struct ibv_wc wc[2];
 	struct ibv_send_wr wr, *bad_wr = NULL;
 	struct ibv_sge sge;
         int ne, i;
-        
+
 	memset(&wr, 0, sizeof(wr));
 	memset(&sge, 0, sizeof(sge));
 
@@ -1565,7 +1572,7 @@ int server_loopback_compare_swp(struct lmr_info *remote_mr, struct lmr_info *loc
 	wr.opcode = IBV_WR_ATOMIC_CMP_AND_SWP;
 	wr.sg_list = &sge;
 	wr.num_sge = 1;
-        
+
 	wr.send_flags = IBV_SEND_SIGNALED;
 	wr.wr.atomic.remote_addr = (uintptr_t)remote_mr->addr;
 	wr.wr.atomic.rkey = remote_mr->rkey;
@@ -1582,10 +1589,10 @@ int server_loopback_compare_swp(struct lmr_info *remote_mr, struct lmr_info *loc
                         return 1;
                 }
         } while (ne < 1);
-        for (i = 0; i < ne; ++i) 
+        for (i = 0; i < ne; ++i)
         {
 
-                if (wc[i].status != IBV_WC_SUCCESS || wc[i].opcode !=IBV_WC_COMP_SWAP) 
+                if (wc[i].status != IBV_WC_SUCCESS || wc[i].opcode !=IBV_WC_COMP_SWAP)
                 {
                         fprintf(stderr, "Failed status %s (%d) for wr_id %d\n",
                                         ibv_wc_status_str(wc[i].status),
@@ -1606,7 +1613,7 @@ int server_loopback_read(struct lmr_info *remote_mr, struct lmr_info *local_mr)
 	struct ibv_sge sge;
         struct ibv_wc wc[2];
         int ne, i;
-        
+
 	memset(&wr, 0, sizeof(wr));
         memset(&sge, 0, sizeof(sge));
 
@@ -1628,10 +1635,10 @@ int server_loopback_read(struct lmr_info *remote_mr, struct lmr_info *local_mr)
                         return 1;
                 }
         } while (ne < 1);
-        for (i = 0; i < ne; ++i) 
+        for (i = 0; i < ne; ++i)
         {
 
-                if (wc[i].status != IBV_WC_SUCCESS || wc[i].opcode !=IBV_WC_RDMA_READ) 
+                if (wc[i].status != IBV_WC_SUCCESS || wc[i].opcode !=IBV_WC_RDMA_READ)
                 {
                         fprintf(stderr, "Failed status %s (%d) for wr_id %d\n",
                                         ibv_wc_status_str(wc[i].status),
@@ -1649,10 +1656,10 @@ int server_send_request(int connection_id, enum mode s_mode, struct lmr_info *re
 	struct ibv_send_wr wr, *bad_wr = NULL;
 	struct ibv_sge sge;
         struct ibv_mr *ret_mr;
-        
+
         int waiting_id = server_get_waiting_id_by_semaphore();
         ctx->thread_state[waiting_id]=TS_WAIT;
-        
+
 	memset(&wr, 0, sizeof(wr));
         memset(&sge, 0, sizeof(sge));
 
@@ -1668,7 +1675,7 @@ int server_send_request(int connection_id, enum mode s_mode, struct lmr_info *re
         //Bottleneck
 
         ret_mr = server_register_memory_api(connection_id, addr, size, IBV_ACCESS_LOCAL_WRITE);
-        
+
 	sge.addr = (uint64_t)ret_mr->addr;
 	sge.length = ret_mr->length;
 	sge.lkey = ret_mr->lkey;
@@ -1701,4 +1708,3 @@ int liteapi_reg_atomic_single_send_handler(int (*input_funptr)(struct atomic_str
         ctx->atomic_single_send_handler = input_funptr;
         return 0;
 }
-
