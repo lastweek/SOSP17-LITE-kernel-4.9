@@ -841,12 +841,10 @@ int server_keep_server_alive(void *ptr)
 		connection_fd =
 		    accept(listen_fd, (struct sockaddr *)&remoteaddr, &addrlen);
 
-		inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP,
-			  INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN);
 
 		//Prepare the local side IB configuration, refer to liteapi_establish_connection
-		debug_printf
-		    ("IB Preparation for the incoming %d connection from %s\n",
+		debug_printf ("IB Preparation for the incoming %d connection from %s\n",
 		     cur_node, remoteIP);
 
 		//Send NODE ID
@@ -883,14 +881,13 @@ int server_keep_server_alive(void *ptr)
 		       sizeof(struct client_data));
 
 		//Send the local connection information to the remote side
-		ret =
-		    write(connection_fd, &ctx->ah_attrUD[0],
+		ret = write(connection_fd, &ctx->ah_attrUD[0],
 			  sizeof(struct client_ah_combined));
-		ret =
-		    read(connection_fd, &ctx->ah_attrUD[cur_node],
-			 sizeof(struct client_ah_combined));
-		memset(&ah_attr, 0, sizeof(struct ibv_ah_attr));
 
+		ret = read(connection_fd, &ctx->ah_attrUD[cur_node],
+			 sizeof(struct client_ah_combined));
+
+		memset(&ah_attr, 0, sizeof(struct ibv_ah_attr));
 		ah_attr.dlid = ctx->ah_attrUD[cur_node].dlid;
 		ah_attr.sl = 0;
 		ah_attr.src_path_bits = 0;
@@ -906,7 +903,7 @@ int server_keep_server_alive(void *ptr)
 
 		ctx->ah[cur_node] = ibv_create_ah(ctx->pd, &ah_attr);
 		if (!ctx->ah[cur_node]) {
-			printf("Fail to create ah\n");
+			printf("Fail to create ah.\n");
 			exit(-1);
 		}
 
@@ -927,6 +924,7 @@ int server_keep_server_alive(void *ptr)
 			ah_mr_1 = server_register_memory_api(0, &ctx->ah_attrUD[i],
 						       sizeof(struct client_ah_combined),
 						       IBV_ACCESS_LOCAL_WRITE);
+
 			ah_mr_2 = server_register_memory_api(0, &ctx->ah_attrUD[cur_node],
 						       sizeof(struct client_ah_combined),
 						       IBV_ACCESS_LOCAL_WRITE);
@@ -935,44 +933,27 @@ int server_keep_server_alive(void *ptr)
 			server_send_message_sge(i, MSG_NODE_JOIN_UD, ah_mr_2, 0, 0);
 
 			for (j = 0; j < ctx->num_parallel_connection; j++) {
-				int new_connection_source =
-				    cur_node * ctx->num_parallel_connection + j;
-				int new_connection_target =
-				    i * ctx->num_parallel_connection + j;
 				int connection_id_1 = new_connection_source;	//server_get_connection_by_atomic_number(new_connection_source);
+				int connection_id_2 = new_connection_target;	//server_get_connection_by_atomic_number(new_connection_target);
 				struct ibv_mr *ret_mr_1;
-				ret_mr_1 =
-				    server_register_memory_api(connection_id_1,
-							       &server_reply.
-							       client_list[i].
-							       server_information_buffer
-							       [new_connection_source],
-							       sizeof
-							       (LID_SEND_RECV_FORMAT),
+				struct ibv_mr *ret_mr_2;
+				int new_connection_source = cur_node * ctx->num_parallel_connection + j;
+				int new_connection_target = i * ctx->num_parallel_connection + j;
+
+				ret_mr_1 = server_register_memory_api(connection_id_1,
+							       &server_reply.client_list[i].server_information_buffer[new_connection_source],
+							       sizeof (LID_SEND_RECV_FORMAT),
 							       IBV_ACCESS_LOCAL_WRITE);
-				//debug_printf("send %s to %d via %d\n", server_reply.client_list[i].server_information_buffer[new_connection_source], new_connection_source, connection_id_1);
+
 				server_send_message_sge(cur_node, MSG_NODE_JOIN,
 							ret_mr_1, 0, 0);
 
-				//memcpy(ctx->send_msg[new_connection_target]->data.newnode_msg, server_reply.client_list[cur_node].server_information_buffer[new_connection_target], sizeof(LID_SEND_RECV_FORMAT));
-				//server_send_message(new_connection_target, MSG_NODE_JOIN);
-
-				int connection_id_2 = new_connection_target;	//server_get_connection_by_atomic_number(new_connection_target);
-				struct ibv_mr *ret_mr_2;
-				ret_mr_2 =
-				    server_register_memory_api(connection_id_2,
-							       &server_reply.
-							       client_list
-							       [cur_node].
-							       server_information_buffer
-							       [new_connection_target],
-							       sizeof
-							       (LID_SEND_RECV_FORMAT),
-							       IBV_ACCESS_LOCAL_WRITE);
+				ret_mr_2 = server_register_memory_api(connection_id_2,
+						       &server_reply.client_list[cur_node].server_information_buffer[new_connection_target],
+						       sizeof(LID_SEND_RECV_FORMAT),IBV_ACCESS_LOCAL_WRITE);
 				server_send_message_sge(i, MSG_NODE_JOIN,
 							ret_mr_2, 0, 0);
 
-				//debug_printf("send %s to %d\n", server_reply.client_list[cur_node].server_information_buffer[new_connection_target], new_connection_target);
 				usleep(1000);
 			}
 		}
@@ -981,7 +962,6 @@ int server_keep_server_alive(void *ptr)
 		memset(recv_buf, 0, sizeof LID_SEND_RECV_FORMAT);
 		memset(send_buf, 0, sizeof LID_SEND_RECV_FORMAT);
 		cur_node++;
-
 	}
 }
 

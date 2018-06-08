@@ -3618,7 +3618,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					pr_info("%s: create UD dlid %d qpn %d nodeid %d ah %p\n", __func__,
 						ctx->ah_attrUD[node_id].dlid, ctx->ah_attrUD[node_id].qpn,
 						ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
-
+s
 					client_free_recv_buf(addr);
 					header_cache_free(free_ptr);
 					break;
@@ -5911,7 +5911,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	}
 
 	client_ktcp_recv(excsocket,(char *)&NODE_ID, sizeof(int));
-	printk(KERN_ALERT "Receive %d\n", NODE_ID);
+	printk(KERN_ALERT "Receive NODE_ID %d\n", NODE_ID);
 	if (NODE_ID<=0) {
 		printk(KERN_ALERT "fail to get NODE_ID as %d\n", NODE_ID);
 		return 0;
@@ -5919,7 +5919,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 
 	ctx->node_id = NODE_ID;
 	client_ktcp_recv(excsocket, (char *)&ask_number_of_MR_set, sizeof(int));
-	printk(KERN_ALERT "Receive %d\n", ask_number_of_MR_set);
+	printk(KERN_ALERT "Receive NR_MR_SET %d\n", ask_number_of_MR_set);
 
 	if(ask_number_of_MR_set < 1 || ask_number_of_MR_set > MAX_CONNECTION)
 	{
@@ -5927,11 +5927,6 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		return 0;
 	}
 
-	//post-recv RC for CD QP
-	/*for(i=0;i<ctx->num_parallel_connection;i++)//This part need to be modified into max(num_parallel_connection, ask_number_of_MR_set) in the future.
-	{
-		int cur_connection = server_id + i;
-	}*/
 
 	//UD_POST
 	client_post_receives_message_UD(ctx, RECV_DEPTH);
@@ -5949,38 +5944,41 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	//Connect RC to CD
         memset(&recv_ah, 0, sizeof(struct client_ah_combined));
         memset(&send_ah, 0, sizeof(struct client_ah_combined));
+
 	client_ktcp_recv(excsocket, (char *)&recv_ah, sizeof(struct client_ah_combined));
 	ctx->ah_attrUD[0].qpn = recv_ah.qpn;
 	ctx->ah_attrUD[0].node_id = recv_ah.node_id;
 	ctx->ah_attrUD[0].qkey = recv_ah.qkey;
 	ctx->ah_attrUD[0].dlid = recv_ah.dlid;
 	memcpy(&ctx->ah_attrUD[0].gid, &recv_ah.gid, sizeof(union ib_gid));
+
 	memset(&ah_attr, 0, sizeof(struct ib_ah_attr));
 	ah_attr.dlid      = ctx->ah_attrUD[0].dlid;
 	ah_attr.sl        = 0;
 	ah_attr.src_path_bits = 0;
 	ah_attr.port_num = 1;
-	if(SGID_INDEX!=-1)
-	{
+
+	if (SGID_INDEX!=-1) {
 		ah_attr.ah_flags = 1;
 		//ah_attr.grh.dgid = ctx->ah_attrUD[0].gid;
 		memcpy(&ah_attr.grh.dgid, &ctx->ah_attrUD[0].gid, sizeof(union ib_gid));
 		ah_attr.grh.sgid_index = SGID_INDEX;
 		ah_attr.grh.hop_limit = 1;
 	}
+
 	ctx->ah[0] = ib_create_ah(ctx->pd, &ah_attr);
 	if(!ctx->ah[0])
 	{
 		printk(KERN_CRIT "fail to create ah for CD\n");
 	}
+
 	printk(KERN_CRIT "%s: UD message from CD with qpn %d and lid %d: %p\n", __func__, recv_ah.qpn, recv_ah.dlid, ctx->ah[0]);
 
 	send_ah.qpn	= ctx->qpUD->qp_num;
 	send_ah.node_id = ctx->node_id;
 	send_ah.qkey	= 0x336;
 	send_ah.dlid    = ctx->portinfo.lid;
-	if(SGID_INDEX!=-1)
-	{
+	if(SGID_INDEX!=-1) {
 		memcpy(&send_ah.gid, &ctx->gid, sizeof(union ib_gid));
 	}
 	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
