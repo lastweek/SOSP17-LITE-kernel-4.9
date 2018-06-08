@@ -3615,10 +3615,10 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					}
 
 					ctx->ah[node_id] = ib_create_ah(ctx->pd, &ah_attr);
-					pr_info("%s: create UD dlid %d qpn %d nodeid %d ah %p\n", __func__,
+					pr_info("%s: node_id= %d create UD dlid %d qpn %d nodeid %d ah %p\n", __func__, node_id,
 						ctx->ah_attrUD[node_id].dlid, ctx->ah_attrUD[node_id].qpn,
 						ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
-s
+
 					client_free_recv_buf(addr);
 					header_cache_free(free_ptr);
 					break;
@@ -5673,6 +5673,13 @@ int client_alloc_continuous_memory(ltc *ctx, unsigned long long vaddr, unsigned 
 }
 EXPORT_SYMBOL(client_alloc_continuous_memory);
 
+int handle_server_sock(void *_sockfd)
+{
+	int sockfd = (int)_sockfd;
+
+	return 0;
+}
+
 /**
  * client_establish_conn - join LITE cluster
  * @ib_dev: infiniband device pointer
@@ -5703,6 +5710,8 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	struct ib_ah_attr ah_attr;
         unsigned ip_a, ip_b, ip_c, ip_d;
 	ltc *ctx;
+
+
         temp_ctx_number = atomic_inc_return(&Connected_LITE_Num);
         if(temp_ctx_number>=MAX_LITE_NUM)
         {
@@ -5921,31 +5930,30 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	client_ktcp_recv(excsocket, (char *)&ask_number_of_MR_set, sizeof(int));
 	printk(KERN_ALERT "Receive NR_MR_SET %d\n", ask_number_of_MR_set);
 
-	if(ask_number_of_MR_set < 1 || ask_number_of_MR_set > MAX_CONNECTION)
-	{
-		printk(KERN_ALERT "ask too many required MR set from server %d\n", ask_number_of_MR_set);
+	if (ask_number_of_MR_set < 1 || ask_number_of_MR_set > MAX_CONNECTION) {
+		printk(KERN_ALERT "ask too many required MR set from server %d\n",
+			ask_number_of_MR_set);
 		return 0;
 	}
-
 
 	//UD_POST
 	client_post_receives_message_UD(ctx, RECV_DEPTH);
 
 	//Send required QP information (future clients) to CD
-	for(i=0;i<ask_number_of_MR_set;i++)
-	{
+	for (i = 0; i < ask_number_of_MR_set; i++) {
 		client_gen_msg(ctx, msg, i);
-		//printk(KERN_ALERT "%d: %s\n", i, msg);
 		memcpy(&my_QPset[i].server_information_buffer, &msg, sizeof(msg));
 		client_ktcp_send(excsocket, msg, sizeof(LID_SEND_RECV_FORMAT));
 		udelay(100);
 	}
 
+#if 1
 	//Connect RC to CD
         memset(&recv_ah, 0, sizeof(struct client_ah_combined));
         memset(&send_ah, 0, sizeof(struct client_ah_combined));
 
 	client_ktcp_recv(excsocket, (char *)&recv_ah, sizeof(struct client_ah_combined));
+
 	ctx->ah_attrUD[0].qpn = recv_ah.qpn;
 	ctx->ah_attrUD[0].node_id = recv_ah.node_id;
 	ctx->ah_attrUD[0].qkey = recv_ah.qkey;
@@ -5982,8 +5990,18 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		memcpy(&send_ah.gid, &ctx->gid, sizeof(union ib_gid));
 	}
 	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
-
 	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, NODE_ID);
+#else
+	/*
+	 * No UD between server and client
+	 * Just keep a live sock fd between them
+	 */
+	sock_fd_thread = kthread_run(handle_server_sock, (void *)excsocket, "handle_server_sock");
+	if (IS_ERR_OR_NULL(sock_fd_thread)) {
+		pr_err("Fail to create sock_fd_thread\n");
+		return NULL;
+	}
+#endif
 	return ctx;
 }
 EXPORT_SYMBOL(client_establish_conn);

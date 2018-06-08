@@ -769,6 +769,8 @@ int liteapi_send_reply(int target_node, char *msg, int size, char *output_msg)
 	return wait_send_reply_id;
 }
 
+int sock_fd[MAX_NODE];
+
 int server_keep_server_alive(void *ptr)
 {
 	int ret;
@@ -832,23 +834,23 @@ int server_keep_server_alive(void *ptr)
 	server_post_receives_message(1, ctx->rx_depth);
 
 	while (1) {
-		//Get local LID information and prepare to send
 		struct lite_dest my_dest;
 		struct lite_dest rem_dest;
 		int server_id = 0;
 		struct ibv_ah_attr ah_attr;
+
 		//Connect with the remote side
-		connection_fd =
-		    accept(listen_fd, (struct sockaddr *)&remoteaddr, &addrlen);
+		connection_fd = accept(listen_fd, (struct sockaddr *)&remoteaddr, &addrlen);
+		sock_fd[cur_node] = connection_fd;
 
 		inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN);
 
 		//Prepare the local side IB configuration, refer to liteapi_establish_connection
-		debug_printf ("IB Preparation for the incoming %d connection from %s\n",
-		     cur_node, remoteIP);
+		debug_printf ("IB Preparation for the incoming %d connection from %s socd_fd=%d\n",
+		     cur_node, remoteIP, sock_fd[cur_node]);
 
 		//Send NODE ID
-		debug_printf("send NODE_ID %d\n", cur_node);
+		debug_printf("  Send NODE_ID %d\n", cur_node);
 		ret = write(connection_fd, &cur_node, sizeof(int));
 		if (ret != sizeof(int)) {
 			die("SEND NODE ID ERROR");
@@ -856,6 +858,7 @@ int server_keep_server_alive(void *ptr)
 		}
 
 		//Send require number
+		debug_printf("  Send NR_MR_SET %d\n", ask_number_of_MR_set);
 		ret = write(connection_fd, &ask_number_of_MR_set, sizeof(int));
 		if (ret != sizeof(int)) {
 			die("SEND require MR number ERROR");
@@ -869,17 +872,14 @@ int server_keep_server_alive(void *ptr)
 					sizeof(recv_buf));
 				die("Read remote MR set error");
 			}
-			memcpy(loop_cache.server_information_buffer[i],
-			       recv_buf, ret);
+			memcpy(loop_cache.server_information_buffer[i], recv_buf, ret);
 		}
-
-		debug_printf("Get Connection from %s: %s\n", remoteIP,
-			     loop_cache.server_information_buffer[0]);
 
 		memcpy(loop_cache.server_name, remoteIP, strlen(remoteIP));
 		memcpy(&server_reply.client_list[cur_node], &loop_cache,
 		       sizeof(struct client_data));
 
+#if 1
 		//Send the local connection information to the remote side
 		ret = write(connection_fd, &ctx->ah_attrUD[0],
 			  sizeof(struct client_ah_combined));
@@ -906,7 +906,6 @@ int server_keep_server_alive(void *ptr)
 			printf("Fail to create ah.\n");
 			exit(-1);
 		}
-
 		printf("%s: UD message from %d with qpn %d and lid %d: %p\n",
 		       __func__, cur_node, ctx->ah_attrUD[cur_node].qpn,
 		       ctx->ah_attrUD[cur_node].dlid, ctx->ah[cur_node]);
@@ -933,12 +932,12 @@ int server_keep_server_alive(void *ptr)
 			server_send_message_sge(i, MSG_NODE_JOIN_UD, ah_mr_2, 0, 0);
 
 			for (j = 0; j < ctx->num_parallel_connection; j++) {
+				int new_connection_source = cur_node * ctx->num_parallel_connection + j;
+				int new_connection_target = i * ctx->num_parallel_connection + j;
 				int connection_id_1 = new_connection_source;	//server_get_connection_by_atomic_number(new_connection_source);
 				int connection_id_2 = new_connection_target;	//server_get_connection_by_atomic_number(new_connection_target);
 				struct ibv_mr *ret_mr_1;
 				struct ibv_mr *ret_mr_2;
-				int new_connection_source = cur_node * ctx->num_parallel_connection + j;
-				int new_connection_target = i * ctx->num_parallel_connection + j;
 
 				ret_mr_1 = server_register_memory_api(connection_id_1,
 							       &server_reply.client_list[i].server_information_buffer[new_connection_source],
@@ -957,6 +956,26 @@ int server_keep_server_alive(void *ptr)
 				usleep(1000);
 			}
 		}
+#else
+
+		for (i = 1; i < cur_node; i++) {
+			struct ibv_mr *ah_mr_1, *ah_mr_2;
+
+			/* Self? */
+			if (strcmp(server_reply.client_list[cur_node].server_name,
+				   server_reply.client_list[i].server_name) == 0)
+				continue;
+
+			ah_mr_1 = server_register_memory_api(0, &ctx->ah_attrUD[i],
+						       sizeof(struct client_ah_combined),
+						       IBV_ACCESS_LOCAL_WRITE);
+
+			ah_mr_2 = server_register_memory_api(0, &ctx->ah_attrUD[cur_node],
+						       sizeof(struct client_ah_combined),
+						       IBV_ACCESS_LOCAL_WRITE);
+
+		}
+#endif
 
 		memset(&loop_cache, 0, sizeof(struct client_data));
 		memset(recv_buf, 0, sizeof LID_SEND_RECV_FORMAT);
