@@ -907,7 +907,13 @@ int server_keep_server_alive(void *ptr)
 			ah_attr.grh.sgid_index = SGID_INDEX;
 			ah_attr.grh.hop_limit = 1;
 		}
+
 		ctx->ah[cur_node] = ibv_create_ah(ctx->pd, &ah_attr);
+		if (!ctx->ah[cur_node]) {
+			printf("Fail to create ah\n");
+			exit(-1);
+		}
+
 		printf("%s: UD message from %d with qpn %d and lid %d: %p\n",
 		       __func__, cur_node, ctx->ah_attrUD[cur_node].qpn,
 		       ctx->ah_attrUD[cur_node].dlid, ctx->ah[cur_node]);
