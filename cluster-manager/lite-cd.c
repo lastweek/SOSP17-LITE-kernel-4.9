@@ -985,6 +985,20 @@ int server_keep_server_alive(void *ptr)
 		 * Use socket to pass information to existing nodes
 		 * No need to pass UD though.
 		 */
+
+		ret = write(connection_fd, &ctx->ah_attrUD[0],
+			  sizeof(struct client_ah_combined));
+
+		ret = read(connection_fd, &ctx->ah_attrUD[cur_node],
+			 sizeof(struct client_ah_combined));
+
+		/*
+		 * Don't build UD connection between Server and Client
+		 */
+		printf("%s: UD message from %d with qpn %d and lid %d: %p\n",
+		       __func__, cur_node, ctx->ah_attrUD[cur_node].qpn,
+		       ctx->ah_attrUD[cur_node].dlid, ctx->ah[cur_node]);
+
 		for (i = 1; i < cur_node; i++) {
 			struct ibv_mr *ah_mr_1, *ah_mr_2;
 

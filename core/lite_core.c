@@ -6068,6 +6068,50 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
 	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, NODE_ID);
 #else
+
+        memset(&recv_ah, 0, sizeof(struct client_ah_combined));
+        memset(&send_ah, 0, sizeof(struct client_ah_combined));
+
+	client_ktcp_recv(excsocket, (char *)&recv_ah, sizeof(struct client_ah_combined));
+
+	ctx->ah_attrUD[0].qpn = recv_ah.qpn;
+	ctx->ah_attrUD[0].node_id = recv_ah.node_id;
+	ctx->ah_attrUD[0].qkey = recv_ah.qkey;
+	ctx->ah_attrUD[0].dlid = recv_ah.dlid;
+	memcpy(&ctx->ah_attrUD[0].gid, &recv_ah.gid, sizeof(union ib_gid));
+
+	memset(&ah_attr, 0, sizeof(struct ib_ah_attr));
+	ah_attr.dlid      = ctx->ah_attrUD[0].dlid;
+	ah_attr.sl        = 0;
+	ah_attr.src_path_bits = 0;
+	ah_attr.port_num = 1;
+
+	if (SGID_INDEX!=-1) {
+		ah_attr.ah_flags = 1;
+		//ah_attr.grh.dgid = ctx->ah_attrUD[0].gid;
+		memcpy(&ah_attr.grh.dgid, &ctx->ah_attrUD[0].gid, sizeof(union ib_gid));
+		ah_attr.grh.sgid_index = SGID_INDEX;
+		ah_attr.grh.hop_limit = 1;
+	}
+
+	/*
+	 * Don't build UD connection between server and client
+	 * but we need to send our UD info to Server
+	 * So server can give that to other nodes.
+	 */
+	printk(KERN_CRIT "%s: UD message from CD with qpn %d and lid %d: %p\n",
+		__func__, recv_ah.qpn, recv_ah.dlid, ctx->ah[0]);
+
+	send_ah.qpn	= ctx->qpUD->qp_num;
+	send_ah.node_id = ctx->node_id;
+	send_ah.qkey	= 0x336;
+	send_ah.dlid    = ctx->portinfo.lid;
+	if(SGID_INDEX!=-1) {
+		memcpy(&send_ah.gid, &ctx->gid, sizeof(union ib_gid));
+	}
+	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
+
+
 	/*
 	 * No UD between server and client
 	 * Just keep a live sock fd between them
