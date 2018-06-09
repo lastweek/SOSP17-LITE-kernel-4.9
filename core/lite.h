@@ -105,29 +105,25 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 #ifdef LITE_DEBUG
-# define lite_err(fmt, ...)					\
-	pr_crit("[%s:%d] %s():%d: "fmt"\n",			\
-		current->comm, current->pid,			\
-		__func__, __LINE__, __VA_ARGS__)
-
 # define lite_dp(fmt, ...)					\
 	pr_crit("[%s:%d] %s():%d: "fmt"\n",			\
 		current->comm, current->pid,			\
 		__func__, __LINE__, __VA_ARGS__)
 #else
-static inline void lite_err(const char *fmt, ...)
-{
-
-}
 static inline void lite_dp(const char *fmt, ...)
 {
 
 }
 #endif /* LITE_DEBUG */
 
+#define lite_err(fmt, ...)					\
+	pr_crit("[%s:%d] %s():%d: "fmt"\n",			\
+		current->comm, current->pid,			\
+		__func__, __LINE__, __VA_ARGS__)
+
 #define DEBUG_SHINYEH
 
-#define LITE_ROCE
+//#define LITE_ROCE
 
 #ifdef LITE_ROCE
 	#define SGID_INDEX 0

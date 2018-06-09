@@ -3829,6 +3829,12 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 	wr->send_flags = IB_SEND_SIGNALED;
 
 	ud_wr.ah = ctx->ah[target_node];
+	if (!ud_wr.ah) {
+		pr_info("tartget_node: %d\n", target_node);
+		WARN_ON_ONCE(1);
+		return -1;
+	}
+
 	ud_wr.remote_qpn = ctx->ah_attrUD[target_node].qpn;
 	ud_wr.remote_qkey = ctx->ah_attrUD[target_node].qkey;
 
@@ -3859,8 +3865,8 @@ int __client_send_message_sge_UD(ltc *ctx, int target_node, int type, void *addr
 
 		for(i=0;i<ne;i++) {
 			if (wc[i].status != IB_WC_SUCCESS) {
-				lite_err("type:%d wr->wr_id:%Lu wc[%d]->wr_id: %Lu Send failed at UD as %d (%s)",
-					type, wr->wr_id, i, wc[i].wr_id,
+				lite_err("target_node: %d type:%d wr->wr_id:%Lu wc[%d]->wr_id: %Lu Send failed at UD as %d (%s)",
+					target_node, type, wr->wr_id, i, wc[i].wr_id,
 					wc[i].status, ib_wc_status_msg(wc[i].status));
 				ret = 2;
 				goto out;
