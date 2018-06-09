@@ -769,7 +769,26 @@ int liteapi_send_reply(int target_node, char *msg, int size, char *output_msg)
 	return wait_send_reply_id;
 }
 
-int sock_fd[MAX_NODE];
+int sock_fd[MAX_NODE] = { -1 };
+
+static void server_sock_send(int target_node, int opcode, struct ibv_mr *mr)
+{
+	int ret;
+	void *buf;
+
+	buf = malloc(mr->length + 4);
+	if (!buf)
+		die("oom");
+
+	*(int *)buf = opcode;
+	memcpy(buf + 4, mr->addr, mr->length);
+
+	ret = write(sock_fd[target_node], buf, mr->length + 4);
+	if (ret != (mr->length + 4))
+		die("fail to send");
+
+	free(buf);
+}
 
 int server_keep_server_alive(void *ptr)
 {
@@ -879,8 +898,12 @@ int server_keep_server_alive(void *ptr)
 		memcpy(&server_reply.client_list[cur_node], &loop_cache,
 		       sizeof(struct client_data));
 
-#if 1
-		//Send the local connection information to the remote side
+#if 0
+		/*
+		 * Original way:
+		 * Client and server they use both socket and UD to talk,
+		 * which is not necessary. So we have another way of using socket only.
+		 */
 		ret = write(connection_fd, &ctx->ah_attrUD[0],
 			  sizeof(struct client_ah_combined));
 
@@ -958,6 +981,10 @@ int server_keep_server_alive(void *ptr)
 		}
 #else
 
+		/*
+		 * Use socket to pass information to existing nodes
+		 * No need to pass UD though.
+		 */
 		for (i = 1; i < cur_node; i++) {
 			struct ibv_mr *ah_mr_1, *ah_mr_2;
 
@@ -966,14 +993,26 @@ int server_keep_server_alive(void *ptr)
 				   server_reply.client_list[i].server_name) == 0)
 				continue;
 
-			ah_mr_1 = server_register_memory_api(0, &ctx->ah_attrUD[i],
-						       sizeof(struct client_ah_combined),
-						       IBV_ACCESS_LOCAL_WRITE);
+			for (j = 0; j < ctx->num_parallel_connection; j++) {
+				int new_connection_source = cur_node * ctx->num_parallel_connection + j;
+				int new_connection_target = i * ctx->num_parallel_connection + j;
+				int connection_id_1 = new_connection_source;
+				int connection_id_2 = new_connection_target;
+				struct ibv_mr *ret_mr_1, *ret_mr_2;
 
-			ah_mr_2 = server_register_memory_api(0, &ctx->ah_attrUD[cur_node],
-						       sizeof(struct client_ah_combined),
-						       IBV_ACCESS_LOCAL_WRITE);
+				ret_mr_1 = server_register_memory_api(connection_id_1,
+							&server_reply.client_list[i].server_information_buffer[new_connection_source],
+							sizeof (LID_SEND_RECV_FORMAT), IBV_ACCESS_LOCAL_WRITE);
 
+				ret_mr_2 = server_register_memory_api(connection_id_2,
+						       &server_reply.client_list[cur_node].server_information_buffer[new_connection_target],
+						       sizeof(LID_SEND_RECV_FORMAT),IBV_ACCESS_LOCAL_WRITE);
+
+				server_sock_send(cur_node, MSG_NODE_JOIN, ret_mr_1);
+				server_sock_send(i, MSG_NODE_JOIN, ret_mr_2);
+
+				usleep(1000);
+			}
 		}
 #endif
 

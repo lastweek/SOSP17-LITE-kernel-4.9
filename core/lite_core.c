@@ -103,6 +103,9 @@ ktime_t tt_start, tt_end;
 EXPORT_SYMBOL(tt_start);
 EXPORT_SYMBOL(tt_end);
 
+struct task_struct *sock_fd_thread;
+
+ltc *ctx_global;
 
 /**
  * client_find_cq - this function takes a targetted cq and return the index of targetted cq
@@ -1294,7 +1297,9 @@ int client_add_newnode(ltc *ctx, char *msg)
 	struct lite_dest my_dest;
 	int ret;
 	int cur_connection;
+
 	down(&add_newnode_mutex);
+
 	printk(KERN_ALERT "%s: start do add_node with %s\n", __func__, msg);
 
 	client_msg_to_lite_dest(msg, &rem_dest);
@@ -5673,9 +5678,42 @@ int client_alloc_continuous_memory(ltc *ctx, unsigned long long vaddr, unsigned 
 }
 EXPORT_SYMBOL(client_alloc_continuous_memory);
 
-int handle_server_sock(void *_sockfd)
+static int sockfd = -1;
+struct socket *excsocket;
+static char sockbuf[4096];
+
+static int handle_server_sock(void *_unused)
 {
-	int sockfd = (int)_sockfd;
+	int opcode;
+	char *payload;
+
+	/*
+	 * Every message will have 4 bytes opcode
+	 * and payload.
+	 */
+	while (1) {
+		client_ktcp_recv(excsocket, sockbuf, 4096);
+
+		payload = sockbuf + 4;
+		opcode = *(int *)sockbuf;
+		switch (opcode) {
+		case MSG_NODE_JOIN:
+		{
+			struct task_struct *thread_create_new_node;
+			struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
+
+			input->ctx = ctx_global;
+			input->msg = payload;
+
+			thread_create_new_node = kthread_run((void *)client_add_newnode_pass, input, "add_newnoded");
+			if(IS_ERR_OR_NULL(thread_create_new_node))
+				printk(KERN_ALERT "Fail to create a new thread for new node\n");
+			break;
+		}
+		default:
+			WARN_ON_ONCE(1);
+		}
+	}
 
 	return 0;
 }
@@ -5698,9 +5736,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	int port = eth_port;
 
 	struct sockaddr_in	addr;
-	struct socket		*excsocket;
 	char		*port_buf;
-	int		sockfd = -1;
 	char		msg[sizeof LID_SEND_RECV_FORMAT];
 	//char		recv_msg[sizeof LID_SEND_RECV_FORMAT+30];
 	int		ask_number_of_MR_set = 0;
@@ -5757,6 +5793,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
 		return 0;
 	}
+	ctx_global = ctx;
 
         Connected_Ctx[temp_ctx_number-1] = ctx;
 
@@ -5947,7 +5984,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		udelay(100);
 	}
 
-#if 1
+#if 0
 	//Connect RC to CD
         memset(&recv_ah, 0, sizeof(struct client_ah_combined));
         memset(&send_ah, 0, sizeof(struct client_ah_combined));
@@ -5996,7 +6033,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	 * No UD between server and client
 	 * Just keep a live sock fd between them
 	 */
-	sock_fd_thread = kthread_run(handle_server_sock, (void *)excsocket, "handle_server_sock");
+	sock_fd_thread = kthread_run(handle_server_sock, NULL, "handle_server_sock");
 	if (IS_ERR_OR_NULL(sock_fd_thread)) {
 		pr_err("Fail to create sock_fd_thread\n");
 		return NULL;
@@ -6085,6 +6122,9 @@ int client_cleanup_module(void)
 	{
 		printk(KERN_INFO "nothing to kill (asyIO_handler)\n");
 	}
+
+	if (sock_fd_thread)
+		kthread_stop(sock_fd_thread);
 
 	/*if(thread_poll_send_cq)
 	{
