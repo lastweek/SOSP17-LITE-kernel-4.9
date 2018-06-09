@@ -5688,12 +5688,12 @@ EXPORT_SYMBOL(client_alloc_continuous_memory);
 
 static int sockfd = -1;
 struct socket *excsocket;
-static char sockbuf[4096];
 
 static int handle_server_sock(void *_unused)
 {
 	int opcode;
 	char *payload;
+	char *sockbuf;
 	ltc *ctx = ctx_global;
 
 	/*
@@ -5701,7 +5701,12 @@ static int handle_server_sock(void *_unused)
 	 * and payload.
 	 */
 	while (1) {
-		memset(sockbuf, 0, 4096);
+		sockbuf = kzalloc(4096, GFP_KERNEL);
+		if (!sockbuf) {
+			WARN_ONCE(1, "OOM");
+			do_exit(-1);
+		}
+
 		client_ktcp_recv(excsocket, sockbuf, 4096);
 		pr_info("%s(): got one\n", __func__);
 
