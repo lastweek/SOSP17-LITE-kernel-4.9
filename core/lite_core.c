@@ -1300,7 +1300,8 @@ int client_add_newnode(ltc *ctx, char *msg)
 
 	down(&add_newnode_mutex);
 
-	printk(KERN_ALERT "%s: start do add_node with %s\n", __func__, msg);
+	printk(KERN_ALERT "%s: PID: %d start do add_node with %s\n",
+		__func__, current->pid, msg);
 
 	client_msg_to_lite_dest(msg, &rem_dest);
 	cur_connection = (rem_dest.node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_dest.node_id]);
@@ -1312,24 +1313,22 @@ int client_add_newnode(ltc *ctx, char *msg)
 		ret = client_connect_ctx(ctx, cur_connection, ib_port, my_dest.psn, mtu, sl+1, &rem_dest);
 	else
 		ret = client_connect_ctx(ctx, cur_connection, ib_port, my_dest.psn, mtu, sl, &rem_dest);
-#endif
-#ifndef PRIORITY_IMPLEMENTATION_RESOURCE
+#else
 	ret = client_connect_ctx(ctx, cur_connection, ib_port, my_dest.psn, mtu, sl, &rem_dest);
 #endif
-	if(ret)
-	{
+	if(ret) {
 		printk("fail to chreate new node inside add_newnode function\n");
 		up(&add_newnode_mutex);
 		return 1;
 	}
+
 	client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
 
 	atomic_inc(&ctx->num_alive_connection[rem_dest.node_id]);
-
 	atomic_inc(&ctx->alive_connection);
 	up(&add_newnode_mutex);
-	if(atomic_read(&ctx->num_alive_connection[rem_dest.node_id]) == NUM_PARALLEL_CONNECTION)
-	{
+
+	if(atomic_read(&ctx->num_alive_connection[rem_dest.node_id]) == NUM_PARALLEL_CONNECTION) {
 		atomic_inc(&ctx->num_alive_nodes);
 		//Send a request local new UD to register IMM mr
 		//uintptr_t tempaddr;
@@ -1338,7 +1337,7 @@ int client_add_newnode(ltc *ctx, char *msg)
 		//printk(KERN_CRIT "%s: complete %d connection %d\n", __func__, NUM_PARALLEL_CONNECTION, rem_dest.node_id);
 	}
 
-	do_exit(0);
+	printk(KERN_ALERT "%s: PID: %d exits\n", __func__, current->pid);
 }
 
 /**
@@ -3577,6 +3576,9 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 				{
 					struct task_struct *thread_create_new_node;
 					struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
+
+					pr_info("%s() NODE_JOIN\n", __func__);
+
 					input->ctx = ctx;
 					input->msg = addr;
 					thread_create_new_node = kthread_create((void *)client_add_newnode_pass, input, "create new node");
@@ -3620,7 +3622,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 					}
 
 					ctx->ah[node_id] = ib_create_ah(ctx->pd, &ah_attr);
-					pr_info("%s: node_id= %d create UD dlid %d qpn %d nodeid %d ah %p\n", __func__, node_id,
+					pr_info("%s: NODE_JOIN_UD node_id= %d create UD dlid %d qpn %d nodeid %d ah %p\n", __func__, node_id,
 						ctx->ah_attrUD[node_id].dlid, ctx->ah_attrUD[node_id].qpn,
 						ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
 
@@ -5699,7 +5701,9 @@ static int handle_server_sock(void *_unused)
 	 * and payload.
 	 */
 	while (1) {
+		memset(sockbuf, 0, 4096);
 		client_ktcp_recv(excsocket, sockbuf, 4096);
+		pr_info("%s(): got one\n", __func__);
 
 		payload = sockbuf + 4;
 		opcode = *(int *)sockbuf;
@@ -5708,6 +5712,8 @@ static int handle_server_sock(void *_unused)
 		{
 			struct task_struct *thread_create_new_node;
 			struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
+
+			pr_info("%s(): got one NODE_JOIN\n", __func__);
 
 			input->ctx = ctx;
 			input->msg = payload;
@@ -5723,6 +5729,8 @@ static int handle_server_sock(void *_unused)
 			struct ib_ah_attr ah_attr;
 			int node_id;
 
+			pr_info("%s(): got one NODE_JOIN_UD\n", __func__);
+
 			input_ah_attr = (struct client_ah_combined *)payload;
 			node_id = input_ah_attr->node_id;
 
@@ -5736,7 +5744,6 @@ static int handle_server_sock(void *_unused)
 
 			if (SGID_INDEX!=-1) {
 				/* RoCE model.. */
-
 				memcpy(&ah_attr.grh.dgid, &ctx->ah_attrUD[node_id].gid, sizeof(union ib_gid));
 				ah_attr.ah_flags = 1;
 				ah_attr.grh.sgid_index = SGID_INDEX;
@@ -6115,8 +6122,12 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	if(SGID_INDEX!=-1) {
 		memcpy(&send_ah.gid, &ctx->gid, sizeof(union ib_gid));
 	}
-	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
 
+	/*
+	 * We must have this send, which will be stored by server
+	 * and tell others.
+	 */
+	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
 
 	/*
 	 * No UD between server and client
