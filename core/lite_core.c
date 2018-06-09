@@ -5686,6 +5686,7 @@ static int handle_server_sock(void *_unused)
 {
 	int opcode;
 	char *payload;
+	ltc *ctx = ctx_global;
 
 	/*
 	 * Every message will have 4 bytes opcode
@@ -5702,7 +5703,7 @@ static int handle_server_sock(void *_unused)
 			struct task_struct *thread_create_new_node;
 			struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
 
-			input->ctx = ctx_global;
+			input->ctx = ctx;
 			input->msg = payload;
 
 			thread_create_new_node = kthread_run((void *)client_add_newnode_pass, input, "add_newnoded");
@@ -5710,6 +5711,44 @@ static int handle_server_sock(void *_unused)
 				printk(KERN_ALERT "Fail to create a new thread for new node\n");
 			break;
 		}
+		case MSG_NODE_JOIN_UD:
+		{
+			struct client_ah_combined *input_ah_attr;
+			struct ib_ah_attr ah_attr;
+			int node_id;
+
+			input_ah_attr = (struct client_ah_combined *)payload;
+			node_id = input_ah_attr->node_id;
+
+			memcpy(&ctx->ah_attrUD[node_id], payload, sizeof(struct client_ah_combined));
+			memset(&ah_attr, 0, sizeof(struct ib_ah_attr));
+
+			ah_attr.dlid      = ctx->ah_attrUD[node_id].dlid;
+			ah_attr.sl        = UD_QP_SL;
+			ah_attr.src_path_bits = 0;
+			ah_attr.port_num = 1;
+
+			if (SGID_INDEX!=-1) {
+				/* RoCE model.. */
+
+				memcpy(&ah_attr.grh.dgid, &ctx->ah_attrUD[node_id].gid, sizeof(union ib_gid));
+				ah_attr.ah_flags = 1;
+				ah_attr.grh.sgid_index = SGID_INDEX;
+				ah_attr.grh.hop_limit = 1;
+			}
+
+			ctx->ah[node_id] = ib_create_ah(ctx->pd, &ah_attr);
+			if (IS_ERR_OR_NULL(ctx->ah[node_id])) {
+				pr_err("Fail to create UD ah for node:%d\n", node_id);
+				WARN_ON_ONCE(1);
+			} else
+				pr_info("%s: node_id=%d create UD dlid %d qpn %d nodeid %d ah %p\n",
+					__func__, node_id,
+					ctx->ah_attrUD[node_id].dlid, ctx->ah_attrUD[node_id].qpn,
+					ctx->ah_attrUD[node_id].node_id, ctx->ah[node_id]);
+			break;
+		}
+
 		default:
 			WARN_ON_ONCE(1);
 		}

@@ -993,6 +993,17 @@ int server_keep_server_alive(void *ptr)
 				   server_reply.client_list[i].server_name) == 0)
 				continue;
 
+			ah_mr_1 = server_register_memory_api(0, &ctx->ah_attrUD[i],
+						       sizeof(struct client_ah_combined),
+						       IBV_ACCESS_LOCAL_WRITE);
+
+			ah_mr_2 = server_register_memory_api(0, &ctx->ah_attrUD[cur_node],
+						       sizeof(struct client_ah_combined),
+						       IBV_ACCESS_LOCAL_WRITE);
+
+			server_sock_send(cur_node, MSG_NODE_JOIN_UD, ah_mr_1);
+			server_sock_send(i, MSG_NODE_JOIN_UD, ah_mr_2);
+
 			for (j = 0; j < ctx->num_parallel_connection; j++) {
 				int new_connection_source = cur_node * ctx->num_parallel_connection + j;
 				int new_connection_target = i * ctx->num_parallel_connection + j;
