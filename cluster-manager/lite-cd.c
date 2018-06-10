@@ -1018,6 +1018,7 @@ int server_keep_server_alive(void *ptr)
 			server_sock_send(cur_node, MSG_NODE_JOIN_UD, ah_mr_1);
 			server_sock_send(i, MSG_NODE_JOIN_UD, ah_mr_2);
 
+			printf("%s(): num_parallel_connection=%d\n", __func__, ctx->num_parallel_connection);
 			for (j = 0; j < ctx->num_parallel_connection; j++) {
 				int new_connection_source = cur_node * ctx->num_parallel_connection + j;
 				int new_connection_target = i * ctx->num_parallel_connection + j;
@@ -1029,14 +1030,17 @@ int server_keep_server_alive(void *ptr)
 							&server_reply.client_list[i].server_information_buffer[new_connection_source],
 							sizeof (LID_SEND_RECV_FORMAT), IBV_ACCESS_LOCAL_WRITE);
 
+				printf("%s(): j=%d, before sending to node: %d\n", __func__, j, cur_node);
+				server_sock_send(cur_node, MSG_NODE_JOIN, ret_mr_1);
+
 				ret_mr_2 = server_register_memory_api(connection_id_2,
 						       &server_reply.client_list[cur_node].server_information_buffer[new_connection_target],
 						       sizeof(LID_SEND_RECV_FORMAT),IBV_ACCESS_LOCAL_WRITE);
 
-				server_sock_send(cur_node, MSG_NODE_JOIN, ret_mr_1);
+				printf("%s(): j=%d, before sending to node: %d\n", __func__, j, i);
 				server_sock_send(i, MSG_NODE_JOIN, ret_mr_2);
 
-				usleep(1000);
+				sleep(1);
 			}
 		}
 #endif
