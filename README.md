@@ -45,6 +45,9 @@ That means, if you do a install like this `./mlnxofedinstall --user-space-only`,
 
 One has to download [rdma-core](https://github.com/linux-rdma/rdma-core), compile it, and use the `LD_PRELOAD` trick to avoid using OFED's user space libraries. Why the hell I got to know this? Because a man got his needs, just like LITE is not compatible with OFED.
 
+### Switch between OFED
+Oh yes, one can switch between OFED kernel and non-OFED kernel. OFED kernel modules are built/loaded on a per-kernel basis. That means, you can have kernel-1 and kernel-2, with kernel-1 has OFED installed while kernel-2 has not. You can switch via reboot.
+
 ### Commands
 * Download `rdma-core` and compile.
 * `export LD_PRELOAD="~/rdma-core/build/lib/libibverbs.so.1.1.19.0"` (replace the directory and version number)
