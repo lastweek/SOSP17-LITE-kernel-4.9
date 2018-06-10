@@ -39,9 +39,11 @@ To me, the evil MLNX_OFED mainly includes three different things:
     * The user space stuff are basically [rdma-core](https://github.com/linux-rdma/rdma-core) and [perftest](https://www.openfabrics.org/downloads/perftest/).
 * Kernel modules, which replaces the original in-box Linux IB driver.
 
-The sweetest thing about MLNX_OFED is: the user space libraries they provided can only work on a kernel with OFED kernel modules loaded. If you do a install like this `./mlnxofedinstall --user-space-only`, which will install both user space commands and libraries, the user space commands you got are just broken.
+The sweetest thing about MLNX_OFED is: the user space libraries they provided can only work on a kernel with OFED kernel modules loaded. According to the error message and some digging into kernel source code, it should be some uverbs commands format mismatch (correct me if I'm wrong!).
 
-One (yes it' sme) has to download [rdma-core](https://github.com/linux-rdma/rdma-core), compile it, and use the `LD_PRELOAD` trick to avoid using OFED's user space libraries. Why the hell I got to know this? Because a man got his needs, just like LITE is not compatible with OFED.
+That means, if you do a install like this `./mlnxofedinstall --user-space-only`, which will install both user space commands and libraries, the user space commands you got _are just broken_.
+
+One has to download [rdma-core](https://github.com/linux-rdma/rdma-core), compile it, and use the `LD_PRELOAD` trick to avoid using OFED's user space libraries. Why the hell I got to know this? Because a man got his needs, just like LITE is not compatible with OFED.
 
 ### Commands
 * Download `rdma-core` and compile.
