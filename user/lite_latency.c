@@ -54,7 +54,7 @@ static void rdma_write_read()
 {
 	int i, j;
 	uint64_t test_key;
-	int testsize[12]={8,8,64,128,512,1024,1024*2,1024*4,1024*8, 1024*16, 1024*32, 1024*64};
+	int testsize[10]={8,64,512,1024,1024*2,1024*4,1024*8, 1024*16, 1024*32, 1024*64};
 	int password=100;
 	char *buf;
 
