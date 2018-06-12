@@ -5725,7 +5725,6 @@ static int handle_server_sock(void *_unused)
 		}
 
 		client_ktcp_recv(excsocket, sockbuf, 4096);
-		pr_info("%s(): got one\n", __func__);
 
 		payload = sockbuf + 4;
 		opcode = *(int *)sockbuf;
@@ -5738,7 +5737,7 @@ static int handle_server_sock(void *_unused)
 			struct task_struct *thread_create_new_node;
 			struct thread_pass_struct *input = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
 
-			pr_info("%s(): got one NODE_JOIN\n", __func__);
+			//pr_info("%s(): got one NODE_JOIN\n", __func__);
 
 			input->ctx = ctx;
 			input->msg = payload;
@@ -5754,7 +5753,7 @@ static int handle_server_sock(void *_unused)
 			struct ib_ah_attr ah_attr;
 			int node_id;
 
-			pr_info("%s(): got one NODE_JOIN_UD\n", __func__);
+			//pr_info("%s(): got one NODE_JOIN_UD\n", __func__);
 
 			input_ah_attr = (struct client_ah_combined *)payload;
 			node_id = input_ah_attr->node_id;
@@ -6248,9 +6247,6 @@ int client_cleanup_module(void)
 	{
 		printk(KERN_INFO "nothing to kill (asyIO_handler)\n");
 	}
-
-	if (sock_fd_thread)
-		kthread_stop(sock_fd_thread);
 
 	/*if(thread_poll_send_cq)
 	{
