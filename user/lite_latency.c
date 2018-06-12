@@ -3,6 +3,7 @@
  * All rights reserved.
  */
 
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -13,6 +14,7 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <time.h>
+#include <sched.h>
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <sys/syscall.h>
@@ -80,7 +82,8 @@ static void rdma_write_read()
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		diff_ns = timespec_diff_ns(end, start);
 
-		printf("    size = %#10x (%10d) avg_time = %15ld ns\n",
+		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns\n",
+			sched_getcpu(),
 			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
 	}
 
@@ -96,13 +99,26 @@ static void rdma_write_read()
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		diff_ns = timespec_diff_ns(end, start);
 
-		printf("    size = %#10x (%10d) avg_time = %15ld ns\n",
+		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns\n",
+			sched_getcpu(),
 			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
 	}
 }
 
+static int bind_thread(int cpu_id)
+{
+	cpu_set_t cpu_set;
+
+	CPU_ZERO(&cpu_set);
+	CPU_SET(cpu_id, &cpu_set);
+
+	return sched_setaffinity(0, sizeof (cpu_set), &cpu_set);
+}
+
 int main(int argc, char *argv[])
 {
+	int cpu;
+
         if (argc != 2) {
 		printf("Usage: ./latency remote_node_id\n");
 		return -EINVAL;
@@ -110,6 +126,12 @@ int main(int argc, char *argv[])
 
 	pg_size = sysconf(_SC_PAGESIZE);
 	remote_node = atoi(argv[1]);
+
+	bind_thread(55);
+	printf("Start testing on CPU%2d\n", sched_getcpu());
+
 	rdma_write_read();
+
+	printf("Finish testing on CPU%2d\n", sched_getcpu());
 	return 0;
 }

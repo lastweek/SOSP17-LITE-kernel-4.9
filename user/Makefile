@@ -1,7 +1,7 @@
 CFLAGS := -std=gnu11 -Wall -Wmissing-prototypes -Wstrict-prototypes\
 	  -fomit-frame-pointer -freg-struct-return -O2
 
-CFLAGS := -fomit-frame-pointer -freg-struct-return
+CFLAGS := -fomit-frame-pointer -freg-struct-return -lrdmacm -libverbs -lpthread -ldl
 
 SRCS := $(wildcard example*.c)
 SRCS += $(wildcard lite_*.c)
