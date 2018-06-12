@@ -131,6 +131,12 @@ static inline void lite_dp(const char *fmt, ...)
 	#define SGID_INDEX -1
 #endif
 
+/*
+ * This determines where LITE internal threads will be running.
+ * It is better to run on the same node where IB card is plugged in.
+ */
+#define LITE_NUMA_NODE	(1)
+
 #define MAX_LITE_NUM 4
 #define MESSAGE_SIZE 4096
 
