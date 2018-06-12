@@ -5730,7 +5730,7 @@ static int handle_server_sock(void *_unused)
 		payload = sockbuf + 4;
 		opcode = *(int *)sockbuf;
 		switch (opcode) {
-		case 0xdeadbeaf:
+		case 0xdeadbeef:
 			pr_crit("%s(): got STOP from server. Exiting..\n", __func__);
 			do_exit(0);
 		case MSG_NODE_JOIN:
@@ -5789,6 +5789,7 @@ static int handle_server_sock(void *_unused)
 
 		default:
 			WARN_ON_ONCE(1);
+			do_exit(0);
 		}
 	}
 
