@@ -107,6 +107,29 @@ struct task_struct *sock_fd_thread;
 
 ltc *ctx_global;
 
+static cpumask_t avail_cpus;
+static DEFINE_SPINLOCK(avail_cpu_lock);
+
+static int next_cpu(void)
+{
+	int cpu = -1;
+
+	spin_lock(&avail_cpu_lock);
+retry:
+	for_each_cpu(cpu, &avail_cpus) {
+		cpumask_clear_cpu(cpu, &avail_cpus);
+		break;
+	}
+
+	if (cpu == -1) {
+		avail_cpus = *cpumask_of_node(LITE_NUMA_NODE);
+		goto retry;
+	}
+
+	spin_unlock(&avail_cpu_lock);
+	return cpu;
+}
+
 /**
  * client_find_cq - this function takes a targetted cq and return the index of targetted cq
  * @ctx: LITE context
@@ -1280,6 +1303,7 @@ int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum i
 
 int client_add_newnode_pass(struct thread_pass_struct *input)
 {
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
@@ -2037,6 +2061,7 @@ int priority_handler(ltc *ctx)
 {
 	int ret;
 
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
@@ -2065,10 +2090,12 @@ int waiting_queue_handler(ltc *ctx)
 	//struct list_head *ptr;
 	allow_signal(SIGKILL);
 
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
 		smp_processor_id());
+
 	while(1)
 	{
 		/*wait_event_interruptible(wq, !list_empty(&(request_list.list)));*/
@@ -3149,6 +3176,7 @@ int client_process_userspace_fast_receive(ltc *ctx, void *ret_addr, int receive_
 
 int client_poll_cq_pass(struct thread_pass_struct *input)
 {
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
@@ -3386,6 +3414,7 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 
 int client_poll_cq_UD_pass(struct thread_pass_struct *input)
 {
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
@@ -3911,6 +3940,8 @@ int client_send_cq_poller(ltc *ctx)
 {
 	int ne, i;
 	struct ib_wc *wc;
+
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
@@ -5723,6 +5754,7 @@ static int handle_server_sock(void *_unused)
 	char *sockbuf;
 	ltc *ctx = ctx_global;
 
+	set_cpus_allowed_ptr(current, cpumask_of(next_cpu()));
 	pr_crit("%s(): [%s:%d] running on Node%d CPU%d\n",
 		__func__, current->comm, current->pid,
 		cpu_to_node(smp_processor_id()),
@@ -6413,6 +6445,8 @@ static int __init lite_internal_init_module(void)
 			"**\n");
 		return -EFAULT;
 	}
+
+	avail_cpus = *cpumask_of_node(LITE_NUMA_NODE);
 
         Connected_Ctx = (ltc **)kmalloc(sizeof(ltc*)*MAX_LITE_NUM, GFP_KERNEL);
         atomic_set(&Connected_LITE_Num, 0);
