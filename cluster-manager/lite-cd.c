@@ -790,6 +790,12 @@ static void server_sock_send(int target_node, int opcode, struct ibv_mr *mr)
 	free(buf);
 }
 
+static void server_send_stop(int target_node)
+{
+	int opcode = 0xdeadbeef;
+	write(sock_fd[target_node], &opcode, 4);
+}
+
 int server_keep_server_alive(void *ptr)
 {
 	int ret;
@@ -1042,6 +1048,11 @@ int server_keep_server_alive(void *ptr)
 
 				sleep(1);
 			}
+
+			sleep(1);
+			printf("%s(): sending STOP to all cluster nodes to let them stop sock thread.\n");
+			server_send_stop(cur_node);
+			server_send_stop(i);
 		}
 #endif
 

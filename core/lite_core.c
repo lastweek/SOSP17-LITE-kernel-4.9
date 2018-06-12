@@ -1280,6 +1280,8 @@ int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum i
 
 int client_add_newnode_pass(struct thread_pass_struct *input)
 {
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
 	client_add_newnode(input->ctx, input->msg);
 	kfree(input);
 	do_exit(0);
@@ -1300,8 +1302,8 @@ int client_add_newnode(ltc *ctx, char *msg)
 
 	down(&add_newnode_mutex);
 
-	printk(KERN_ALERT "%s: PID: %d start do add_node with %s\n",
-		__func__, current->pid, msg);
+	//printk(KERN_ALERT "%s: PID: %d start do add_node with %s\n",
+	//	__func__, current->pid, msg);
 
 	client_msg_to_lite_dest(msg, &rem_dest);
 	cur_connection = (rem_dest.node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_dest.node_id]);
@@ -1337,7 +1339,8 @@ int client_add_newnode(ltc *ctx, char *msg)
 		//printk(KERN_CRIT "%s: complete %d connection %d\n", __func__, NUM_PARALLEL_CONNECTION, rem_dest.node_id);
 	}
 
-	printk(KERN_ALERT "%s: PID: %d exits\n", __func__, current->pid);
+	//printk(KERN_ALERT "%s: PID: %d exits\n", __func__, current->pid);
+	return 0;
 }
 
 /**
@@ -2031,6 +2034,9 @@ EXPORT_SYMBOL(client_alloc_memory_for_mr);
 int priority_handler(ltc *ctx)
 {
 	int ret;
+
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
 	while(!kthread_should_stop())
 	{
 		ret = wait_event_interruptible_timeout(ctx->priority_block_queue, kthread_should_stop(), msecs_to_jiffies(PRIORITY_CHECKING_PERIOD_US));
@@ -2054,6 +2060,9 @@ int waiting_queue_handler(ltc *ctx)
         int queue_flag;
 	//struct list_head *ptr;
 	allow_signal(SIGKILL);
+
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
 	while(1)
 	{
 		/*wait_event_interruptible(wq, !list_empty(&(request_list.list)));*/
@@ -3134,9 +3143,11 @@ int client_process_userspace_fast_receive(ltc *ctx, void *ret_addr, int receive_
 
 int client_poll_cq_pass(struct thread_pass_struct *input)
 {
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
+
 	client_poll_cq(input->ctx, input->target_cq);
 	kfree(input);
-	printk(KERN_CRIT "%s: kill ctx %p cq %p\n", __func__, (void *)input->ctx, (void *)input->target_cq);
 	do_exit(0);
 	return 0;
 }
@@ -3367,9 +3378,11 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 
 int client_poll_cq_UD_pass(struct thread_pass_struct *input)
 {
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
+
 	client_poll_cq_UD(input->ctx, input->target_cq);
 	kfree(input);
-	printk(KERN_CRIT "%s: kill ctx %p UD cq %p\n", __func__, (void *)input->ctx, (void *)input->target_cq);
 	do_exit(0);
 	return 0;
 }
@@ -3581,7 +3594,7 @@ int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 
 					input->ctx = ctx;
 					input->msg = addr;
-					thread_create_new_node = kthread_create((void *)client_add_newnode_pass, input, "create new node");
+					thread_create_new_node = kthread_create((void *)client_add_newnode_pass, input, "LITE_add_newnode");
 					//printk(KERN_ALERT "%s: Create RC node %s\n", __func__, input->msg);
 					if(IS_ERR(thread_create_new_node))
 					{
@@ -3888,6 +3901,8 @@ int client_send_cq_poller(ltc *ctx)
 {
 	int ne, i;
 	struct ib_wc *wc;
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
 	wc = kmalloc(sizeof(struct ib_wc)*128, GFP_KERNEL);
 	while(1)
 	{
@@ -5696,6 +5711,8 @@ static int handle_server_sock(void *_unused)
 	char *sockbuf;
 	ltc *ctx = ctx_global;
 
+	pr_crit("%s(): [%s:%d] running on CPU%d\n",
+		__func__, current->comm, current->pid, smp_processor_id());
 	/*
 	 * Every message will have 4 bytes opcode
 	 * and payload.
@@ -5713,6 +5730,9 @@ static int handle_server_sock(void *_unused)
 		payload = sockbuf + 4;
 		opcode = *(int *)sockbuf;
 		switch (opcode) {
+		case 0xdeadbeaf:
+			pr_crit("%s(): got STOP from server. Exiting..\n", __func__);
+			do_exit(0);
 		case MSG_NODE_JOIN:
 		{
 			struct task_struct *thread_create_new_node;
@@ -5723,7 +5743,7 @@ static int handle_server_sock(void *_unused)
 			input->ctx = ctx;
 			input->msg = payload;
 
-			thread_create_new_node = kthread_run((void *)client_add_newnode_pass, input, "add_newnoded");
+			thread_create_new_node = kthread_run((void *)client_add_newnode_pass, input, "LITE_add_newnode");
 			if(IS_ERR_OR_NULL(thread_create_new_node))
 				printk(KERN_ALERT "Fail to create a new thread for new node\n");
 			break;
@@ -5876,7 +5896,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		spin_lock_init(&(MR_HASHTABLE_LOCK[i]));
 	}
 	//kthread_run(waiting_queue_handler, NULL, "waiting queue handler");
-	thread_handler = kthread_create((void *)waiting_queue_handler, ctx, "wq_handler");
+	thread_handler = kthread_create((void *)waiting_queue_handler, ctx, "LT_wq_handler");
 	if(IS_ERR(thread_handler))
 	{
 		printk(KERN_ALERT "Fail to do handler\n");
@@ -5885,7 +5905,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
         //kthread_bind(thread_handler, NUM_POLLING_THREADS);
 	wake_up_process(thread_handler);
 
-	thread_priority_handler = kthread_create((void *)priority_handler, ctx, "priority_handler");
+	thread_priority_handler = kthread_create((void *)priority_handler, ctx, "LT_prior_handler");
 	if(IS_ERR(thread_priority_handler))
 	{
 		printk(KERN_ALERT "Fail to do priority_handler\n");
@@ -5902,7 +5922,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	{
 		char thread_name[32]={};
 		struct thread_pass_struct *thread_pass_poll_cq = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
-		sprintf(thread_name, "cq_poller_%d", i);
+		sprintf(thread_name, "LT_cq_poller%d", i);
 		thread_pass_poll_cq->ctx = ctx;
 		thread_pass_poll_cq->target_cq = ctx->cq[i];
 		thread_poll_cq[i] = kthread_create((void *)client_poll_cq_pass, thread_pass_poll_cq, thread_name);
@@ -5918,7 +5938,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	{
 		char thread_name[32]={};
 		struct thread_pass_struct *thread_pass_poll_cq = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
-		sprintf(thread_name, "UDcq_poller_%d", i);
+		sprintf(thread_name, "LT_UDcq_poller%d", i);
 		thread_pass_poll_cq->ctx = ctx;
 		thread_pass_poll_cq->target_cq = ctx->cqUD;
 		thread_poll_cq[NUM_POLLING_THREADS] = kthread_create((void *)client_poll_cq_UD_pass, thread_pass_poll_cq, thread_name);
@@ -5934,7 +5954,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
         #ifdef SHARE_POLL_CQ_MODEL
 	{
 		char thread_name[32]={};
-		sprintf(thread_name, "send cq_poller");
+		sprintf(thread_name, "LT_sendcq_poller");
 		thread_poll_cq[NUM_POLLING_THREADS + 1] = kthread_create((void *)client_send_cq_poller, ctx, thread_name);
 		if(IS_ERR(thread_poll_cq[NUM_POLLING_THREADS + 1]))
 		{
@@ -6138,7 +6158,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	 * No UD between server and client
 	 * Just keep a live sock fd between them
 	 */
-	sock_fd_thread = kthread_run(handle_server_sock, NULL, "handle_server_sock");
+	sock_fd_thread = kthread_run(handle_server_sock, NULL, "LITE_sock");
 	if (IS_ERR_OR_NULL(sock_fd_thread)) {
 		pr_err("Fail to create sock_fd_thread\n");
 		return NULL;
