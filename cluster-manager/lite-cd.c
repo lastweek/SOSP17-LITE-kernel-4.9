@@ -49,6 +49,7 @@
 //#define NO_LOCK_IMPLEMENTATION
 
 #include "client.h"
+#include <sched.h>
 
 static const int RDMA_BUFFER_SIZE = 4096;
 static const int CIRCULAR_BUFFER = CIRCULAR_BUFFER_LENGTH;
@@ -827,6 +828,8 @@ int server_keep_server_alive(void *ptr)
 	    FIRST_ASK_MR_SET * ctx->num_parallel_connection;
 	int i, j;
 
+	printf("%s(): CPU%2d\n", __func__, sched_getcpu());
+
 	//Initialize Configuration
 	memset(&myaddr, 0, sizeof(struct sockaddr_in));
 	memset(&remoteaddr, 0, sizeof(struct sockaddr_in));
@@ -1004,6 +1007,8 @@ int server_keep_server_alive(void *ptr)
 		printf("%s: UD message from %d with qpn %d and lid %d: %p\n",
 		       __func__, cur_node, ctx->ah_attrUD[cur_node].qpn,
 		       ctx->ah_attrUD[cur_node].dlid, ctx->ah[cur_node]);
+
+		sleep(2);
 
 		for (i = 1; i < cur_node; i++) {
 			struct ibv_mr *ah_mr_1, *ah_mr_2;
@@ -1278,6 +1283,7 @@ int server_lock_handling(void)
 	struct liteapi_header output_header;
 	struct ibv_mr *output_header_mr;
 
+	printf("%s(): CPU%2d\n", __func__, sched_getcpu());
 	output_header_mr =
 	    server_register_memory_api(connection_id, &output_header,
 				       sizeof(struct liteapi_header),
@@ -1430,6 +1436,8 @@ int server_poll_cq(struct ibv_cq *target_cq)
 	int ne, i;
 
 	int connection_id, waiting_id;
+
+	printf("%s(): CPU%2d\n", __func__, sched_getcpu());
 	while (1) {
 		do {
 			ne = ibv_poll_cq(target_cq, 1, wc);

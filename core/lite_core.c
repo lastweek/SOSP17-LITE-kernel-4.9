@@ -4343,7 +4343,10 @@ EXPORT_SYMBOL(client_send_reply_with_rdma_write_with_imm_sge);
  * @userspace_flag: distinguish this request is from kernel space or userspace
  * @priority: priority level
  */
-int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsigned int port, void *addr, int size, void *ret_addr, int max_ret_size, void *ret_length, int userspace_flag, int priority)
+int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsigned int port,
+					       void *addr, int size, void *ret_addr,
+					       int max_ret_size, void *ret_length, int userspace_flag,
+					       int priority)
 {
 	int tar_offset_start;
 	int connection_id;
@@ -4366,11 +4369,11 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	unsigned long phys_addr;
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
         int local_flag;
+
         if(target_node == ctx->node_id)
                 local_flag = 1;
         else
                 local_flag = 0;
-	//printk(KERN_CRIT "[%s]: size %d\n", __func__, size);
 
 	if(size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE)
 	{
@@ -4382,16 +4385,13 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 		printk(KERN_CRIT "%s: null input addr\n", __func__);
 		return -2;
 	}
-	/*if(!ret_addr) //it was checking ret_addr here. However, LITE uses NULL ret_addr to implement send (without reply).
-	{
-		printk(KERN_CRIT "%s: null ret addr\n", __func__);
-		return -2;
-	}*/
+
 	if(port > IMM_MAX_PORT-1)
 	{
 		printk(KERN_CRIT "%s: port %d too large < %d\n", __func__, port, IMM_MAX_PORT);
 		return REG_PORT_TOO_LARGE;
 	}
+
 	tar_offset_start = client_get_offset_and_mr_by_length(ctx, target_node, port, real_size, &remote_mr);//40ns
 	if(tar_offset_start==REG_DO_QUERY_FIRST)
 	{
@@ -4399,38 +4399,32 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 		return REG_DO_QUERY_FIRST;
 	}
 
-	//retry_send_reply_with_imm_request:
         if(local_flag)
                 connection_id = -1;
         else
 		connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);//25-40ns
-	//test6-start takes 59ns, occasionally takes 120-170ns(test 10 times with 10000 average runs in each test, and get 1 number in this range)
-
 
         imm_data = IMM_SEND_REPLY_SEND | port << IMM_PORT_PUSH_BIT | tar_offset_start;
         if(ret_addr)
         {
                 store_id = client_get_store_by_addr(ctx, &wait_send_reply_id);//
-		//test6-end
-                //printk(KERN_CRIT "%s: send message to %d %d\n", __func__, target_node, store_id);
-		//imm_data = IMM_SEND_REPLY_SEND | tar_offset_start;
 
                 output_header = &ctx->imm_store_header[store_id];
 		output_header->store_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
                 output_header->store_rkey = ctx->proc->rkey;
                 output_header->store_semaphore = store_id;
-        }
-        else
-        {
+        } else {
                 store_id = -1;
                 output_header = &output_header_send_only;
                 output_header->store_addr = (uintptr_t)NULL;
                 output_header->store_rkey = 0;
                 output_header->store_semaphore = 0;
         }
+
 	output_header->designed_port = port;
 	output_header->source_node_id = ctx->node_id;
 	output_header->size = size;
+
         if(!local_flag)
         {
 		remote_addr = remote_mr->addr;
@@ -4441,7 +4435,6 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                 remote_addr = NULL;
                 remote_rkey = 0;
         }
-	//printk(KERN_CRIT "%s: send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n", __func__, imm_data, remote_addr, remote_rkey, output_header.store_addr, output_header.store_rkey);
 
 	if(userspace_flag)
 	{
@@ -4486,10 +4479,12 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 		        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_USERSPACE_FLAG, 0, NULL, 1);
                         return 0;
                 }
-		#ifdef SCHEDULE_MODEL
+
+#ifdef SCHEDULE_MODEL
 		ctx->imm_store_semaphore_task[store_id] = get_current();
 		set_current_state(TASK_INTERRUPTIBLE);
-		#endif
+#endif
+
 		if(userspace_send_continuous)//since the memory space is using phys directly, it should be treated differently
                 {
                         client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_USERSPACE_FLAG, 0, NULL, 0);
@@ -4507,15 +4502,13 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 				client_send_message_with_rdma_emulated_for_local(ctx, port, real_addr, size, output_header, LITE_USERSPACE_FLAG);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
                         }
                 }
-	}
-	else
-	{
+	} else {
                 if(ret_addr)
                 {
-			#ifdef SCHEDULE_MODEL
+#ifdef SCHEDULE_MODEL
 			ctx->imm_store_semaphore_task[store_id] = get_current();
 			set_current_state(TASK_INTERRUPTIBLE);
-			#endif
+#endif
 			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);
                 }
                 else
@@ -4525,22 +4518,18 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                 }
 	}
 
-	#ifdef SCHEDULE_MODEL
+#ifdef SCHEDULE_MODEL
 	schedule();
 	set_current_state(TASK_RUNNING);
-	#endif
+#endif
 
 
-	//cpurelax model
-	#ifdef CPURELAX_MODEL
+#ifdef CPURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
-	{
 		cpu_relax();
-	}
-	#endif
+#endif
 
-	//adaptive model
-	#ifdef ADAPTIVE_MODEL
+#ifdef ADAPTIVE_MODEL
 	if(size<=IMM_SEND_SLEEP_SIZE_THRESHOLD)//If size is small, it should do busy wait here, or the waiting time is too long, it should jump to sleep queue
 	{
 		unsigned long j0,j1;
@@ -4558,7 +4547,8 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 				break;
 		}
 	}
-	#endif
+#endif
+
 	if(unlikely(wait_send_reply_id < 0))
 	{
 		printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with connection-%d store-%d status-%d\n", __func__, connection_id, store_id, wait_send_reply_id);
