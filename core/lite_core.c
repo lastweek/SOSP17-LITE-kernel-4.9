@@ -4185,16 +4185,19 @@ inline int client_get_offset_and_mr_by_length(ltc *ctx, int target_node, int des
 inline int client_get_store_by_addr(ltc *ctx, void *addr)
 {
 	int tar;
+
         spin_lock(&ctx->imm_store_semaphore_lock[0]);
+
         tar = find_first_zero_bit(ctx->imm_store_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
-        while(tar==IMM_NUM_OF_SEMAPHORE)
-        {
+        while(tar==IMM_NUM_OF_SEMAPHORE) {
                 schedule();
                 tar = find_first_zero_bit(ctx->imm_store_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
         }
         set_bit(tar, ctx->imm_store_semaphore_bitmap);
         spin_unlock(&ctx->imm_store_semaphore_lock[0]);
+
         ctx->imm_store_semaphore[tar] = addr;
+
 	return tar;
 }
 
@@ -4370,31 +4373,29 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
         int local_flag;
 
-        if(target_node == ctx->node_id)
+        if (target_node == ctx->node_id)
                 local_flag = 1;
         else
                 local_flag = 0;
 
-	if(size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE)
-	{
-		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n", __func__, size, IMM_MAX_SIZE);
+	if (size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE) {
+		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n",
+			__func__, size, IMM_MAX_SIZE);
 		return -1;
 	}
-	if(!addr)
-	{
+
+	if (!addr) {
 		printk(KERN_CRIT "%s: null input addr\n", __func__);
 		return -2;
 	}
 
-	if(port > IMM_MAX_PORT-1)
-	{
+	if (port > IMM_MAX_PORT-1) {
 		printk(KERN_CRIT "%s: port %d too large < %d\n", __func__, port, IMM_MAX_PORT);
 		return REG_PORT_TOO_LARGE;
 	}
 
 	tar_offset_start = client_get_offset_and_mr_by_length(ctx, target_node, port, real_size, &remote_mr);//40ns
-	if(tar_offset_start==REG_DO_QUERY_FIRST)
-	{
+	if (tar_offset_start==REG_DO_QUERY_FIRST) {
 		printk(KERN_CRIT "%s: can't find node %d port %d\n", __func__, target_node, port);
 		return REG_DO_QUERY_FIRST;
 	}
@@ -4405,9 +4406,8 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 		connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);//25-40ns
 
         imm_data = IMM_SEND_REPLY_SEND | port << IMM_PORT_PUSH_BIT | tar_offset_start;
-        if(ret_addr)
-        {
-                store_id = client_get_store_by_addr(ctx, &wait_send_reply_id);//
+        if (ret_addr) {
+                store_id = client_get_store_by_addr(ctx, &wait_send_reply_id);
 
                 output_header = &ctx->imm_store_header[store_id];
 		output_header->store_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
@@ -4425,45 +4425,34 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	output_header->source_node_id = ctx->node_id;
 	output_header->size = size;
 
-        if(!local_flag)
-        {
+        if(!local_flag) {
 		remote_addr = remote_mr->addr;
 		remote_rkey = remote_mr->rkey;
-        }
-        else
-        {
+        } else {
                 remote_addr = NULL;
                 remote_rkey = 0;
         }
 
-	if(userspace_flag)
-	{
-                //page checking takes around 40 ns when the page is both continuous
-		if(lite_check_page_continuous(addr, size, &phys_addr) && !local_flag)//check send buffer continuous
-		{
+	if (userspace_flag) {
+		if(lite_check_page_continuous(addr, size, &phys_addr) && !local_flag) {
 			userspace_send_continuous = 1;
 			real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
-		}
-		else
-		{
+		} else {
 			real_addr = kmem_cache_alloc(imm_copy_userspace_buffer_cache, GFP_KERNEL);
-			if(copy_from_user(real_addr, addr, size))
-			{
+			if(copy_from_user(real_addr, addr, size)) {
 				kmem_cache_free(imm_copy_userspace_buffer_cache, real_addr);
 				return -EFAULT;
 			}
 		}
-                if(ret_addr)//regular send-reply handling
-                {
-			if(lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag)//check reply buffer continuous
-			{
+
+                if (ret_addr) { //regular send-reply handling
+			if(lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag) {
 				userspace_reply_continuous = 1;
 				real_ret_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
-				output_header->store_addr = (uintptr_t) real_ret_addr;//This part need to be handled careful in the future
-			}
-			else{
+				output_header->store_addr = (uintptr_t)real_ret_addr;
+			} else {
 				real_ret_addr = kmem_cache_alloc(imm_copy_userspace_buffer_cache, GFP_KERNEL);
-				output_header->store_addr = client_ib_reg_mr_addr(ctx, real_ret_addr, max_ret_size);//This part need to be handled careful in the future
+				output_header->store_addr = client_ib_reg_mr_addr(ctx, real_ret_addr, max_ret_size);
 			}
 
                         if(ret_length && userspace_send_continuous && userspace_reply_continuous && lite_check_page_continuous(ret_length, sizeof(int), &phys_addr))
@@ -4473,17 +4462,14 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                                 *(int *)real_retlength_vaddr = SEND_REPLY_WAIT;
                                 ctx->imm_store_semaphore[store_id] = real_retlength_vaddr;
                         }
-                }
-                else//process send request here if it's a pure send request
-                {
-		        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_USERSPACE_FLAG, 0, NULL, 1);
+                } else { //process send request here if it's a pure send request
+		        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
+						(uintptr_t)remote_addr, real_addr, size,
+						tar_offset_start, imm_data,
+						LITE_SEND_MESSAGE_HEADER_AND_IMM,
+						output_header, LITE_USERSPACE_FLAG, 0, NULL, 1);
                         return 0;
                 }
-
-#ifdef SCHEDULE_MODEL
-		ctx->imm_store_semaphore_task[store_id] = get_current();
-		set_current_state(TASK_INTERRUPTIBLE);
-#endif
 
 		if(userspace_send_continuous)//since the memory space is using phys directly, it should be treated differently
                 {
@@ -4505,10 +4491,6 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	} else {
                 if(ret_addr)
                 {
-#ifdef SCHEDULE_MODEL
-			ctx->imm_store_semaphore_task[store_id] = get_current();
-			set_current_state(TASK_INTERRUPTIBLE);
-#endif
 			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);
                 }
                 else
@@ -4518,18 +4500,10 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                 }
 	}
 
-#ifdef SCHEDULE_MODEL
-	schedule();
-	set_current_state(TASK_RUNNING);
-#endif
-
-
 #ifdef CPURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		cpu_relax();
-#endif
-
-#ifdef ADAPTIVE_MODEL
+#elif ADAPTIVE_MODEL
 	if(size<=IMM_SEND_SLEEP_SIZE_THRESHOLD)//If size is small, it should do busy wait here, or the waiting time is too long, it should jump to sleep queue
 	{
 		unsigned long j0,j1;
@@ -4549,15 +4523,12 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 	}
 #endif
 
-	if(unlikely(wait_send_reply_id < 0))
-	{
+	if(unlikely(wait_send_reply_id < 0)) {
 		printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with connection-%d store-%d status-%d\n", __func__, connection_id, store_id, wait_send_reply_id);
                 return wait_send_reply_id;
-		//goto retry_send_reply_with_imm_request;
 	}
 
-	if(userspace_flag)
-	{
+	if(userspace_flag) {
 		if(!userspace_send_continuous)//DO free if we did kmalloc
 		{
 			kmem_cache_free(imm_copy_userspace_buffer_cache, real_addr);
@@ -4580,6 +4551,7 @@ EXPORT_SYMBOL(client_send_reply_with_rdma_write_with_imm);
 /**
  * client_send_message_with_rdma_emulated_for_local - issue a local RPC
  * !!!LITE-RPC is mainly built for remote messaging. This function is still in beta version!!! Please be aware
+ q
  * @ctx: lite context
  * @port: destinated port
  * @addr: input address
