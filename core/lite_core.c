@@ -3770,7 +3770,7 @@ inline int client_get_congestion_status(ltc *ctx, int connection_id)
  * @target_node: destionation node id
  * @priority: priority level
  */
-inline int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priority)
+int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priority)
 {
 #ifdef PRIORITY_IMPLEMENTATION_RESOURCE
 	if(priority == USERSPACE_LOW_PRIORITY)
@@ -3778,7 +3778,15 @@ inline int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int
 	else
 		return atomic_inc_return(&ctx->atomic_request_num[target_node])%(NUM_PARALLEL_CONNECTION-1) + NUM_PARALLEL_CONNECTION * target_node + 1;
 #endif
-	return atomic_inc_return(&ctx->atomic_request_num[target_node])%(NUM_PARALLEL_CONNECTION) + NUM_PARALLEL_CONNECTION * target_node;
+	/*
+	 * XXX:
+	 * To me, this RR approach lost a lot locality.
+	 * and after all, what is point of doing QP RR selection?
+	 *
+	 *	- ys
+	 */
+	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
+		NUM_PARALLEL_CONNECTION * target_node;
 }
 EXPORT_SYMBOL(client_get_connection_by_atomic_number);
 
@@ -4125,21 +4133,20 @@ EXPORT_SYMBOL(client_internal_poll_sendcq);
  * @size: request size
  * @mr: buffer for returned LMR info
  */
-inline int client_get_offset_and_mr_by_length(ltc *ctx, int target_node, int designed_port, int size, struct lmr_info **mr)
+int client_get_offset_and_mr_by_length(ltc *ctx, int target_node, int designed_port,
+				       int size, struct lmr_info **mr)
 {
 	int ret;
-
 	int bucket;
 	uint64_t port_node_key;
-	//check first
 	struct app_reg_port *current_hash_ptr;
 	int found=0;
 	int last_ack;
+
         if(target_node==ctx->node_id)
                 return REG_DO_LOCAL_SEND;
 
 	port_node_key = (designed_port<<MAX_NODE_BIT) + target_node;
-	//printk(KERN_CRIT "%s: checking key as %d\n", __func__, port_node_key);
 	bucket = port_node_key % (1<<HASH_TABLE_SIZE_BIT);
 	rcu_read_lock();
 	hash_for_each_possible_rcu(REMOTE_MEMORYRING_PORT_HASHTABLE, current_hash_ptr, hlist, bucket)
@@ -4434,7 +4441,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
         }
 
 	if (userspace_flag) {
-		if(lite_check_page_continuous(addr, size, &phys_addr) && !local_flag) {
+		if (lite_check_page_continuous(addr, size, &phys_addr) && !local_flag) {
 			userspace_send_continuous = 1;
 			real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
 		} else {
@@ -4445,8 +4452,11 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 			}
 		}
 
-                if (ret_addr) { //regular send-reply handling
-			if(lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag) {
+		/*
+		 * regular send-reply handling
+		 */ 
+                if (ret_addr) {
+			if (lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag) {
 				userspace_reply_continuous = 1;
 				real_ret_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
 				output_header->store_addr = (uintptr_t)real_ret_addr;
@@ -4455,14 +4465,18 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 				output_header->store_addr = client_ib_reg_mr_addr(ctx, real_ret_addr, max_ret_size);
 			}
 
-                        if(ret_length && userspace_send_continuous && userspace_reply_continuous && lite_check_page_continuous(ret_length, sizeof(int), &phys_addr))
-                        {
-                                userspace_retlength_continuous = 1;
+                        if (ret_length && userspace_send_continuous &&
+			    userspace_reply_continuous &&
+			    lite_check_page_continuous(ret_length, sizeof(int), &phys_addr)) {
+			    	userspace_retlength_continuous = 1;
                                 real_retlength_vaddr = phys_to_virt(phys_addr);
                                 *(int *)real_retlength_vaddr = SEND_REPLY_WAIT;
                                 ctx->imm_store_semaphore[store_id] = real_retlength_vaddr;
                         }
-                } else { //process send request here if it's a pure send request
+                } else {
+			/*
+			 * Send request here if it's a pure send request
+			 */
 		        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
 						(uintptr_t)remote_addr, real_addr, size,
 						tar_offset_start, imm_data,
@@ -4471,31 +4485,47 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                         return 0;
                 }
 
-		if(userspace_send_continuous)//since the memory space is using phys directly, it should be treated differently
-                {
-                        client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_USERSPACE_FLAG, 0, NULL, 0);
+		if (userspace_send_continuous) {
+			/*
+			 * Since the memory space is using phys directly,
+			 * it should be treated differently
+			 */
+                        client_send_message_with_rdma_write_with_imm_request(ctx,
+				connection_id, remote_rkey, (uintptr_t)remote_addr,
+				real_addr, size, tar_offset_start, imm_data,
+				LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header,
+				LITE_USERSPACE_FLAG, 0, NULL, 0);
+
                         if(userspace_retlength_continuous)
                                 return 0;
-                }
-		else//local_sendreply will only be in this category
-                {
-                        if(!local_flag)
-                        {
-				client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, real_addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
-                        }
-                        else
-                        {
-				client_send_message_with_rdma_emulated_for_local(ctx, port, real_addr, size, output_header, LITE_USERSPACE_FLAG);//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
+                } else {
+			/*
+			 * local_sendreply will only be in this category
+			 */
+                        if(!local_flag) {
+				client_send_message_with_rdma_write_with_imm_request(ctx,
+					connection_id, remote_rkey, (uintptr_t)remote_addr,
+					real_addr, size, tar_offset_start, imm_data,
+					LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header,
+					LITE_KERNELSPACE_FLAG, 0, NULL, 0);
+				//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
+                        } else {
+				client_send_message_with_rdma_emulated_for_local(ctx,
+					port, real_addr, size, output_header, LITE_USERSPACE_FLAG);
+				//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
                         }
                 }
 	} else {
-                if(ret_addr)
-                {
-			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 0);
-                }
-                else
-                {
-			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, (uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header, LITE_KERNELSPACE_FLAG, 0, NULL, 1);
+                if (ret_addr) {
+			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
+				(uintptr_t)remote_addr, addr, size, tar_offset_start,
+				imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header,
+				LITE_KERNELSPACE_FLAG, 0, NULL, 0);
+                } else {
+			client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
+				(uintptr_t)remote_addr, addr, size, tar_offset_start,
+				imm_data, LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header,
+				LITE_KERNELSPACE_FLAG, 0, NULL, 1);
                         return 0;
                 }
 	}
@@ -4503,7 +4533,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 #ifdef CPURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		cpu_relax();
-#elif ADAPTIVE_MODEL
+#elif defined(ADAPTIVE_MODEL)
 	if(size<=IMM_SEND_SLEEP_SIZE_THRESHOLD)//If size is small, it should do busy wait here, or the waiting time is too long, it should jump to sleep queue
 	{
 		unsigned long j0,j1;
