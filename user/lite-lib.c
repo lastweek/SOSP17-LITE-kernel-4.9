@@ -41,22 +41,27 @@ inline int userspace_liteapi_receive_message_low(unsigned int port, void *ret_ad
         return ret;
 }
 
-inline int userspace_liteapi_receive_message_fast(unsigned int port, void *ret_addr, int receive_size, uintptr_t *descriptor, int *ret_length, int block_call)
+int userspace_liteapi_receive_message_fast(unsigned int port, void *ret_addr, int receive_size,
+					uintptr_t *descriptor, int *ret_length, int block_call)
 {
         int ret;
         int i=0;
+
         *descriptor = 0;
-        //ret = syscall(__NR_lite_receive_message, receive_size*IMM_MAX_PORT+port, ret_addr, descriptor, ret_length, block_call, NULL_PRIORITY);
-        ret = syscall(__NR_lite_receive_message, (receive_size<<IMM_MAX_PORT_BIT)+port, ret_addr, descriptor, ret_length, block_call, NULL_PRIORITY);
+
+        ret = syscall(__NR_lite_receive_message, (receive_size<<IMM_MAX_PORT_BIT)+port,
+		ret_addr, descriptor, ret_length, block_call, NULL_PRIORITY);
+
         while(*(descriptor)==0 && ++i<CHECK_LENGTH);
-        //while(*(descriptor)==0);
 
         while(*(descriptor)==0)
         {
                 usleep(1);
         };
+
         if(*(descriptor) == IMM_SEND_ONLY_FLAG)
                 *(descriptor) = 0;
+
         if(ret<0)
                 return *ret_length;
         return ret;
@@ -119,6 +124,9 @@ userspace_liteapi_send_reply_imm_low(int target_node, unsigned int port, void *a
 		addr, ret_addr, 0, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+USERSPACE_LOW_PRIORITY);
 }
 
+/*
+ * This is the version with RPC syscall optimizations.
+ */
 int
 userspace_liteapi_send_reply_imm_fast(int target_node, unsigned int port, void *addr,
 				      int size, void *ret_addr, int *ret_length, int max_ret_size)
@@ -135,8 +143,13 @@ userspace_liteapi_send_reply_imm_fast(int target_node, unsigned int port, void *
         if (ret < 0)
                 printf("[significant error] error in fast send setup %d\n", ret);
 
-        while (*ret_length == SEND_REPLY_WAIT)
+	/*
+	 * This is where userspace poll when a RPC finished.
+	 */
+        while (*ret_length == SEND_REPLY_WAIT) {
+		fprintf(stderr, "we got one here\n");
 		;
+	}
 
         if (*ret_length < 0)
                 printf("[significant error] error in fast send %d\n", *ret_length);

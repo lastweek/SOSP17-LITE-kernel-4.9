@@ -45,6 +45,7 @@ void *thread_send_lat(void *tmp)
 	struct timespec start, end;
 	double total_lat;
 	double *record=calloc(run_times, sizeof(double));
+	uintptr_t descriptor;
 
 	memset(write, 'A', 4096);
 	memset(read, 0, 4096);
@@ -61,6 +62,15 @@ void *thread_send_lat(void *tmp)
 			printf("i=%d ret=%d ret_buf=%s\n", i, ret, read);
 		}
 	}
+
+	printf("Before do receive\n");
+	userspace_liteapi_receive_message_fast(port, read, 4096,
+		&descriptor, &ret_length, BLOCK_CALL);
+	printf("ret_buf: %s\n", read);
+	printf("after do receive\n");
+	userspace_liteapi_reply_message(write, 8, descriptor);
+	printf("after do reply\n");
+
 	return 0;
 }
 
@@ -86,12 +96,20 @@ void *thread_recv(void *tmp)
 	for(j=0;j<7;j++) {
 		memset(read, 0, 4096);
                 for (i=0;i<run_times;i++) {
-                        ret = userspace_liteapi_receive_message_fast(port, read, 4096, &descriptor, &ret_length, BLOCK_CALL);
+                        ret = userspace_liteapi_receive_message_fast(port, read, 4096,
+				&descriptor, &ret_length, BLOCK_CALL);
+
 			printf("i=%d ret=%d ret_buf=%s\n", i, ret, read);
                         userspace_liteapi_reply_message(write, testsize[j], descriptor);
                 }
 	}
+
+	printf("beore send_reply\n");
+	userspace_liteapi_send_reply_imm_fast(1, port, write, 8, read, &ret_length, 4096);
+	printf("ret_buf=%s\n", read);
+	printf("after send_reply\n");
 }
+
 int init_log(int remote_node)
 {
         uint64_t xact_ID;
@@ -106,11 +124,13 @@ int init_log(int remote_node)
 		
 		char *name = malloc(16);
 		int ret;
+
 		sprintf(name, "test.1");
         	ret = userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
-		printf("finish registeration ret-%d\n", ret);
+		printf("finish registeration\n");
 
                 userspace_liteapi_dist_barrier(2);
+	
                 temp[0]=1; 
 		pthread_create(&threads[0], NULL, thread_recv, &temp[0]);
 		pthread_join(threads[0], NULL);
@@ -153,5 +173,6 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&count_mutex, NULL);
 	pthread_mutex_init(&end_count_mutex, NULL);
 	init_log(atoi(argv[1]));
+
 	return 0;
 }
