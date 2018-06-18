@@ -22,6 +22,8 @@
 #include <pthread.h>
 #include <time.h>
 
+#include "compiler.h"
+
 /*
  * Grabbed from:
  * arch/x86/include/generated/uapi/asm/unistd_64.h

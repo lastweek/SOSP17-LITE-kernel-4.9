@@ -69,7 +69,8 @@ inline double userspace_liteapi_receive_message_fast_record(unsigned int port, v
         return ret;
 }
 
-inline int userspace_liteapi_send(int target_node, unsigned int port, void *addr, int size)
+int
+userspace_liteapi_send(int target_node, unsigned int port, void *addr, int size)
 {
 	if(size >= LIMITATION)
 	{
@@ -79,61 +80,70 @@ inline int userspace_liteapi_send(int target_node, unsigned int port, void *addr
 	return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port, addr, 0, 0, 0);
 }
 
-inline int userspace_liteapi_send_reply_imm(int target_node, unsigned int port, void *addr, int size, void *ret_addr, int max_ret_size)
+int
+userspace_liteapi_send_reply_imm(int target_node, unsigned int port, void *addr,
+				 int size, void *ret_addr, int max_ret_size)
 {
         if(size >= LIMITATION || max_ret_size >= LIMITATION)
         {
                 printf("%s: size %d max_ret_size %d too big\n", __func__, size, max_ret_size);
                 return -1;
         }
-        //return syscall(__NR_lite_send_reply_imm, target_node, size*IMM_MAX_PORT+port, addr, ret_addr, 0, max_ret_size);
-        return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port, addr, ret_addr, 0, max_ret_size);
+        return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port,
+			addr, ret_addr, 0, max_ret_size);
 }
 
-inline int userspace_liteapi_send_reply_imm_high(int target_node, unsigned int port, void *addr, int size, void *ret_addr, int max_ret_size)
+int
+userspace_liteapi_send_reply_imm_high(int target_node, unsigned int port, void *addr,
+				      int size, void *ret_addr, int max_ret_size)
 {
 	if(size >= LIMITATION || max_ret_size >= LIMITATION)
 	{
 		printf("%s: size %d max_ret_size %d too big\n", __func__, size, max_ret_size);
 		return -1;
 	}
-	//return syscall(__NR_lite_send_reply_imm, target_node, size*IMM_MAX_PORT+port, addr, ret_addr, 0, max_ret_size*IMM_MAX_PRIORITY+USERSPACE_HIGH_PRIORITY);
-	return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port, addr, ret_addr, 0, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+USERSPACE_HIGH_PRIORITY);
+	return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port,
+		addr, ret_addr, 0, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+USERSPACE_HIGH_PRIORITY);
 }
 
-inline int userspace_liteapi_send_reply_imm_low(int target_node, unsigned int port, void *addr, int size, void *ret_addr, int max_ret_size)
+int
+userspace_liteapi_send_reply_imm_low(int target_node, unsigned int port, void *addr,
+				     int size, void *ret_addr, int max_ret_size)
 {
 	if(size >= LIMITATION || max_ret_size >= LIMITATION)
 	{
 		printf("%s: size %d max_ret_size %d too big\n", __func__, size, max_ret_size);
 		return -1;
 	}
-	//return syscall(__NR_lite_send_reply_imm, target_node, size*IMM_MAX_PORT+port, addr, ret_addr, 0, max_ret_size*IMM_MAX_PRIORITY+USERSPACE_LOW_PRIORITY);
-	return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port, addr, ret_addr, 0, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+USERSPACE_LOW_PRIORITY);
+	return syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port,
+		addr, ret_addr, 0, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+USERSPACE_LOW_PRIORITY);
 }
 
-
-inline int userspace_liteapi_send_reply_imm_fast(int target_node, unsigned int port, void *addr, int size, void *ret_addr, int *ret_length, int max_ret_size)
+int
+userspace_liteapi_send_reply_imm_fast(int target_node, unsigned int port, void *addr,
+				      int size, void *ret_addr, int *ret_length, int max_ret_size)
 {
         int ret;
-	if(size >= LIMITATION || max_ret_size >= LIMITATION)
-	{
+
+	if(size >= LIMITATION || max_ret_size >= LIMITATION) {
 		printf("%s: size %d max_ret_size %d too big\n", __func__, size, max_ret_size);
 		return -1;
 	}
-	//ret = syscall(__NR_lite_send_reply_imm, target_node, size*IMM_MAX_PORT+port, addr, ret_addr, ret_length, max_ret_size*IMM_MAX_PRIORITY+NULL_PRIORITY);
-	ret = syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port, addr, ret_addr, ret_length, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+NULL_PRIORITY);
-        if(ret<0)
+
+	ret = syscall(__NR_lite_send_reply_imm, target_node, (size<<IMM_MAX_PORT_BIT)+port,
+		addr, ret_addr, ret_length, (max_ret_size<<IMM_MAX_PRIORITY_BIT)+NULL_PRIORITY);
+        if (ret < 0)
                 printf("[significant error] error in fast send setup %d\n", ret);
-        while(*ret_length==SEND_REPLY_WAIT);
-        if(*ret_length < 0)
-        {
+
+        while (*ret_length == SEND_REPLY_WAIT)
+		;
+
+        if (*ret_length < 0)
                 printf("[significant error] error in fast send %d\n", *ret_length);
-        }
         return *ret_length;
 }
 
-inline int userspace_liteapi_reply_message(void *addr, int size, uintptr_t descriptor)
+int userspace_liteapi_reply_message(void *addr, int size, uintptr_t descriptor)
 {
 	if(size >= LIMITATION)
 	{
@@ -142,16 +152,17 @@ inline int userspace_liteapi_reply_message(void *addr, int size, uintptr_t descr
 	}
 	return syscall(__NR_lite_reply_message, addr, size, descriptor, NULL_PRIORITY);
 }
-inline int userspace_liteapi_reply_message_high(void *addr, int size, uintptr_t descriptor)
+
+int userspace_liteapi_reply_message_high(void *addr, int size, uintptr_t descriptor)
 {
-	if(size >= LIMITATION)
-	{
+	if(size >= LIMITATION) {
 		printf("%s: size %d too big\n", __func__, size);
 		return -1;
 	}
 	return syscall(__NR_lite_reply_message, addr, size, descriptor, USERSPACE_HIGH_PRIORITY);
 }
-inline int userspace_liteapi_reply_message_low(void *addr, int size, uintptr_t descriptor)
+
+int userspace_liteapi_reply_message_low(void *addr, int size, uintptr_t descriptor)
 {
 	if(size >= LIMITATION)
 	{
@@ -165,13 +176,6 @@ inline int userspace_liteapi_query_port(int target_node, int designed_port)
 {
 	return syscall(__NR_lite_query_port, target_node, designed_port, 0);
 }
-
-#if 0
-inline int userspace_liteapi_wrap_alloc(void *data, int size, uint64_t identifier, int password)
-{
-        return syscall(__NR_lite_wrap_alloc, data, size, identifier, password);
-}
-#endif
 
 inline int userspace_liteapi_ask_lmr(int memory_node, uint64_t identifier, uint64_t permission, int password)
 {

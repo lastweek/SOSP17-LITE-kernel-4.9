@@ -40,7 +40,7 @@ static inline void die(const char * str, ...)
  * How many runs each size will run.
  * Amortize random variation.
  */
-#define NR_TESTS_PER_SIZE	(1000000)
+#define NR_TESTS_PER_SIZE	(1000*1000)
 #define NSEC_PER_SEC	(1000*1000*1000)
 
 static inline long timespec_diff_ns(struct timespec end, struct timespec start)
@@ -127,6 +127,7 @@ int main(int argc, char *argv[])
 	pg_size = sysconf(_SC_PAGESIZE);
 	remote_node = atoi(argv[1]);
 
+	//bind_thread(42);
 	bind_thread(55);
 	printf("Start testing on CPU%2d\n", sched_getcpu());
 
