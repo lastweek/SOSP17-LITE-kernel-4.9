@@ -506,13 +506,12 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	ltc *ctx;
 	struct ib_cq_init_attr cq_attr_foo;
 
-	ctx = (ltc*)kmalloc(sizeof(ltc), GFP_KERNEL);
-	memset(ctx, 0, sizeof(ltc));
-	if(!ctx)
-	{
+	ctx = kzalloc(sizeof(ltc), GFP_KERNEL);
+	if(!ctx) {
 		printk(KERN_ALERT "FAIL to initialize ctx in client_init_ctx\n");
 		return NULL;
 	}
+
         ctx->ib_port = port;
 	ctx->size = size;
 	ctx->send_flags = IB_SEND_SIGNALED;
@@ -522,14 +521,17 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	ctx->num_parallel_connection = NUM_PARALLEL_CONNECTION;
 	ctx->context = (struct ib_context *)ib_dev;
 
-
-	if(!ctx->context)
-	{
+	if(!ctx->context) {
 		printk(KERN_ALERT "Fail to initialize device / ctx->context\n");
 		return NULL;
 	}
 	ctx->channel = NULL;
 
+	/*
+	 * Allocate pd and global MR
+	 * This is different across different kernel versions.
+	 * Below one is known to work on 4.9.103
+	 */
 	ctx->pd = ib_alloc_pd(ib_dev, IB_PD_UNSAFE_GLOBAL_RKEY	|
 				      IB_ACCESS_LOCAL_WRITE	|
 				      IB_ACCESS_REMOTE_READ	|
@@ -570,71 +572,61 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 
 	//Customized part
-	ctx->num_alive_connection = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
-	atomic_set(&ctx->num_alive_nodes, 1);
-	memset(ctx->num_alive_connection, 0, ctx->num_node*sizeof(atomic_t));
+	ctx->num_alive_connection = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<ctx->num_node;i++)
 		atomic_set(&ctx->num_alive_connection[i], 0);
 
-	ctx->recv_num = (int *)kmalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
-	memset(ctx->recv_num, 0, ctx->num_connections*sizeof(int));
+	ctx->recv_num = kzalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 
-	ctx->atomic_request_num = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
-	memset(ctx->atomic_request_num, 0, ctx->num_node*sizeof(atomic_t));
+	ctx->atomic_request_num = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<ctx->num_node;i++)
 		atomic_set(&ctx->atomic_request_num[i], -1);
 
-	/*ctx->atomic_request_num = (unsigned long *)kmalloc(ctx->num_node*sizeof(unsigned long), GFP_KERNEL);
-	memset(ctx->atomic_request_num, 0, ctx->num_node*sizeof(unsigned long));
-	for(i=0;i<ctx->num_node;i++)
-		ctx->atomic_request_num[i]=0;*/
-
-	ctx->atomic_request_num_high = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
-	memset(ctx->atomic_request_num_high, 0, ctx->num_node*sizeof(atomic_t));
+	ctx->atomic_request_num_high = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<ctx->num_node;i++)
 		atomic_set(&ctx->atomic_request_num_high[i], -1);
 
-	atomic_set(&ctx->parallel_thread_num,0);
+	ctx->recv_num = kzalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 
+	atomic_set(&ctx->num_alive_nodes, 1);
+	atomic_set(&ctx->parallel_thread_num,0);
 	atomic_set(&ctx->alive_connection, 0);
 	atomic_set(&ctx->num_completed_threads, 0);
 
-	ctx->atomic_buffer = (struct atomic_struct **)kmalloc(num_connections * sizeof(struct atomic_struct *), GFP_KERNEL);
-	ctx->atomic_buffer_total_length = (int *)kmalloc(num_connections * sizeof(int), GFP_KERNEL);
+	ctx->atomic_buffer = kmalloc(num_connections * sizeof(struct atomic_struct *), GFP_KERNEL);
+	ctx->atomic_buffer_total_length = kmalloc(num_connections * sizeof(int), GFP_KERNEL);
 	for(i=0;i<num_connections;i++)
 		ctx->atomic_buffer_total_length[i]=0;
-	ctx->atomic_buffer_cur_length = (int *)kmalloc(num_connections * sizeof(int), GFP_KERNEL);
+	ctx->atomic_buffer_cur_length = kmalloc(num_connections * sizeof(int), GFP_KERNEL);
 	for(i=0;i<num_connections;i++)
 		ctx->atomic_buffer_cur_length[i]=-1;
 
-	ctx->cq = (struct ib_cq **)kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
-	for(i=0;i<NUM_POLLING_THREADS;i++)
-	{
+	/*
+	 * Create a lot CQs
+	 * By default, the NUM_POLLING_THREADS is 1..
+	 */
+	ctx->cq = kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
+	for (i = 0; i < NUM_POLLING_THREADS; i++) {
 		struct ib_cq_init_attr cq_attr;
 
 		cq_attr.cqe = rx_depth * 4 + 1;
 		cq_attr.comp_vector = 0;
 		cq_attr.flags = 0;
 
-		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
-		if (!ctx->cq[i]) {
+		ctx->cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
+		if (IS_ERR_OR_NULL(ctx->cq[i])) {
 			printk(KERN_ALERT "Fail to create cq at %d/ ctx->cq\n", i);
 			return NULL;
 		}
 	}
-	ctx->cq_block = (atomic_t *)kmalloc((NUM_POLLING_THREADS+1)*sizeof(atomic_t), GFP_KERNEL);
+
+	ctx->cq_block = kmalloc((NUM_POLLING_THREADS+1)*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<NUM_POLLING_THREADS+1;i++)
 		atomic_set(&ctx->cq_block[i], 0);
-	ctx->cq_block_queue = (wait_queue_head_t*)kmalloc((NUM_POLLING_THREADS+1)*sizeof(wait_queue_head_t), GFP_KERNEL);
+
+	ctx->cq_block_queue = kmalloc((NUM_POLLING_THREADS+1)*sizeof(wait_queue_head_t), GFP_KERNEL);
 	for(i=0;i<NUM_POLLING_THREADS+1;i++)
 	        init_waitqueue_head(&ctx->cq_block_queue[i]);
-	//ctx->cq = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+1, 0);
-	//if(!ctx->cq)
-	//{
-	//	printk(KERN_ALERT "Fail to create cq / ctx->cq\n");
-	//	return NULL;
-	//}
-	ctx->send_cq = (struct ib_cq **)kmalloc(num_connections * sizeof(struct ib_cq *), GFP_KERNEL);
 
 	//congestion related things
 	ctx->connection_congestion_status = (atomic_t *)kmalloc(num_connections * sizeof(atomic_t), GFP_KERNEL);
@@ -684,19 +676,20 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	//lmr setup
 	atomic_set(&ctx->lmr_inc, 1024);
 
-	//UD connection setup
-
+	/*
+	 * UD connection setup
+	 */
 	ctx->recv_numUD = 0;
 	spin_lock_init(&ctx->connection_lockUD);
-	ctx->ah = (struct ib_ah **)kmalloc(MAX_NODE * sizeof(struct ib_ah*), GFP_KERNEL);
-	ctx->ah_attrUD = (struct client_ah_combined *)kmalloc(MAX_NODE * sizeof(struct client_ah_combined), GFP_KERNEL);
+	ctx->ah = kmalloc(MAX_NODE * sizeof(struct ib_ah*), GFP_KERNEL);
+	ctx->ah_attrUD = kmalloc(MAX_NODE * sizeof(struct client_ah_combined), GFP_KERNEL);
 
 	cq_attr_foo.cqe = rx_depth * 4 + 1;
 	cq_attr_foo.comp_vector = 0;
 	cq_attr_foo.flags = 0;
 
 	ctx->cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr_foo);
-	if (!ctx->cqUD) {
+	if (IS_ERR_OR_NULL(ctx->cqUD)) {
 		printk(KERN_ALERT "Fail to create cqUD\n");
 		return NULL;
 	}
@@ -706,7 +699,7 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	cq_attr_foo.flags = 0;
 
 	ctx->send_cqUD = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr_foo);
-	if (!ctx->send_cqUD) {
+	if (IS_ERR_OR_NULL(ctx->send_cqUD)) {
 		printk(KERN_ALERT "Fail to create send_cqUD\n");
 		return NULL;
 	}
@@ -737,7 +730,6 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 			&attr, &init_attr);
 
 		ib_query_qp(ctx->qpUD, &attr, IB_QP_CAP, &init_attr);
-		pr_info("%s():%d after query qpUD\n", __func__, __LINE__);
 
 		if (init_attr.cap.max_inline_data >= size)
 			ctx->send_flags |= IB_SEND_INLINE;
@@ -759,12 +751,13 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		}
 		printk(KERN_CRIT "UDqpn %d\n", ctx->qpUD->qp_num);
 	}
+
 	{
 		struct ib_qp_attr attr = {
 			.qp_state		= IB_QPS_RTR
 		};
 
-		if(ib_modify_qp(ctx->qpUD, &attr, IB_QP_STATE)) {
+		if (ib_modify_qp(ctx->qpUD, &attr, IB_QP_STATE)) {
 			printk(KERN_CRIT "Failed to modify UDQP to RTR\n");
 			return NULL;
 		}
@@ -783,17 +776,18 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	//Finish UD
 	//
 
-	ctx->qp = (struct ib_qp **)kmalloc(num_connections * sizeof(struct ib_qp *), GFP_KERNEL);
+	ctx->qp = kmalloc(num_connections * sizeof(struct ib_qp *), GFP_KERNEL);
 	if(!ctx->qp)
 	{
 		printk(KERN_ALERT "Fail to create master qp / ctx->qp\n");
 		return NULL;
 	}
 
-	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, rx_depth*4+1, 0);
-	pr_info("%s:%d num_connections:%d\n", __func__, __LINE__, num_connections);
-	for(i=0;i<num_connections;i++)
-	{
+	pr_info("%s:%d num_connections:%d\n",
+		__func__, __LINE__, num_connections);
+
+	ctx->send_cq = kmalloc(num_connections * sizeof(struct ib_cq *), GFP_KERNEL);
+	for (i = 0; i < num_connections; i++) {
 		struct ib_qp_attr attr, attr1;
                 struct ib_qp_init_attr init_attr;
 		struct ib_cq_init_attr cq_attr;
@@ -801,25 +795,38 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
-                #ifdef SHARE_POLL_CQ_MODEL
+#ifdef SHARE_POLL_CQ_MODEL
 		ctx->send_cq[i] = ctx->send_cq[0];
-                #endif
-                #ifdef NON_SHARE_POLL_CQ_MODEL
+#endif
+#ifdef NON_SHARE_POLL_CQ_MODEL
+		/*
+		 * HACK..
+		 * This is the default model!!!
+		 */
 		memset(&cq_attr, 0, sizeof(cq_attr));
 		cq_attr.cqe = rx_depth + 1;
 		cq_attr.comp_vector = 0;
 		cq_attr.flags = 0;
 
 		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, &cq_attr);
-		//ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, poll_cq, NULL, NULL, 12000, 0);
-                #endif
+		if (IS_ERR_OR_NULL(ctx->send_cq[i])) {
+			pr_info("fail to create send_cq[%d]\n", i);
+			return NULL;
+		}
+#endif
 
 		memset(&init_attr, 0, sizeof(init_attr));
-		init_attr.send_cq = ctx->send_cq[i];//ctx->cq
-		//init_attr.recv_cq = ctx->cq;
+
+		/*
+		 * HACK!!
+		 *
+		 * Okay, all QP share the same reve_cq
+		 * Because NUM_POLLING_THREADS=1 -> i % NUM_POLLING_THREADS=0
+		 */
+		init_attr.send_cq = ctx->send_cq[i];
 		init_attr.recv_cq = ctx->cq[i%NUM_POLLING_THREADS];
+
 		init_attr.cap.max_send_wr = rx_depth + 2;
-		//init_attr.cap.max_send_wr = 12000;
 	        init_attr.cap.max_recv_wr = rx_depth;
 		init_attr.qp_type = IB_QPT_RC;
 		init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;
@@ -847,12 +854,11 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
                 attr1.retry_cnt = 7;
                 attr1.rnr_retry = 7;
 
-		if(ib_modify_qp(ctx->qp[i], &attr1,
+		if (ib_modify_qp(ctx->qp[i], &attr1,
 					IB_QP_STATE		|
 					IB_QP_PKEY_INDEX	|
 					IB_QP_PORT		|
-					IB_QP_ACCESS_FLAGS))
-		{
+					IB_QP_ACCESS_FLAGS)) {
 			printk(KERN_ALERT "Fail to modify qp[%d]\n", i);
 			ib_destroy_qp(ctx->qp[i]);
 			return NULL;
@@ -879,7 +885,6 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 		init_waitqueue_head(&ctx->imm_receive_block_queue[i]);
 		spin_lock_init(&ctx->imm_perport_lock[i]);
 		spin_lock_init(&ctx->imm_waitqueue_perport_lock[i]);
-		//atomic_set(&ctx->imm_perport_reg_num[i], -1);
 		ctx->imm_perport_reg_num[i]=-1;
 
                 INIT_LIST_HEAD(&(ctx->imm_wait_userspace_perport[i].list));
@@ -938,6 +943,7 @@ ltc *client_init_interface(int ib_port, struct ib_device *ib_dev)
 	rcnt = 0;
 	scnt = 0;
 
+	/* this is a large one.. */
 	ctx = client_init_ctx(size, rx_depth, ib_port, ib_dev);
 	if (!ctx) {
 		printk(KERN_ALERT "Fail to do client_init_ctx\n");
@@ -945,16 +951,11 @@ ltc *client_init_interface(int ib_port, struct ib_device *ib_dev)
 	}
 
 	ret = ib_query_port((struct ib_device *)ctx->context, ib_port, &ctx->portinfo);
-	if(ret<0)
-	{
+	if(ret<0) {
 		printk(KERN_ALERT "Fail to query port\n");
 	}
-	//do loopback connection
 	client_setup_loopback_connections(ctx, 4096, rx_depth, ib_port);
-
-	//test_printk(KERN_ALERT "I am here before return client_init_interface\n");
 	return ctx;
-
 }
 EXPORT_SYMBOL(client_init_interface);
 
@@ -4743,7 +4744,14 @@ retry_send_imm_request:
                                 wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
                         } else {
-				/* get the real wait_send_reply_id address from store information */
+				/*
+				 * header->store_semaphore is store_id
+				 * which is allocated by client_get_store_by_addr()
+				 * which is the shared polling varaible
+				 *
+				 * For RPC, could be:
+				 *  ctx->imm_store_semaphore[store_id] = real_retlength_vaddr;
+				 */
                                 wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];
                                 wr->send_flags = 0;
                         }
@@ -5849,6 +5857,9 @@ static int handle_server_sock(void *_unused)
  * @servername: string of ip address
  * @eth_port: ethernet port
  * @ib_port: infiniband port
+ *
+ * This is called whenever a client wants to establish connection with others.
+ * It will create all resources.
  */
 ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_port, int ib_port)
 {
@@ -5863,7 +5874,6 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	struct sockaddr_in	addr;
 	char		*port_buf;
 	char		msg[sizeof LID_SEND_RECV_FORMAT];
-	//char		recv_msg[sizeof LID_SEND_RECV_FORMAT+30];
 	int		ask_number_of_MR_set = 0;
         int             temp_ctx_number;
 	struct client_ah_combined recv_ah;
@@ -5872,21 +5882,18 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
         unsigned ip_a, ip_b, ip_c, ip_d;
 	ltc *ctx;
 
-
         temp_ctx_number = atomic_inc_return(&Connected_LITE_Num);
-        if(temp_ctx_number>=MAX_LITE_NUM)
-        {
+        if(temp_ctx_number>=MAX_LITE_NUM) {
                 printk(KERN_CRIT "%s Error: already meet the upper bound of connected LITE %d\n", __func__, temp_ctx_number);
                 atomic_dec(&Connected_LITE_Num);
-                return 0;
+                return NULL;
         }
+
         sscanf(servername, "%u.%u.%u.%u", &ip_a, &ip_b, &ip_c, &ip_d);
         if (ip_a > 255 || ip_b > 255 || ip_c > 255 || ip_d > 255) {
                 printk(KERN_CRIT "Invalid IP: %s\n", servername);
-                return 0;
+                return NULL;
         }
-
-	printk(KERN_CRIT "Start establish connection\n");
 
 	//Build cache for memory --> slab
 	post_receive_cache = kmem_cache_create("post_receive_buffer", POST_RECEIVE_CACHE_SIZE, 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
@@ -5911,12 +5918,10 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	//lock related
 	lock_queue_element_buffer_cache = kmem_cache_create("lock_queue_element_cache", sizeof(struct lite_lock_queue_element), 0, (SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD), NULL);
 
-	pr_crit("%s:%d before client_init_interface\n", __func__, __LINE__);
 	ctx = client_init_interface(ib_port, ib_dev);
-	pr_crit("%s:%d after client_init_interface\n", __func__, __LINE__);
 	if (!ctx) {
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;
+		return NULL;
 	}
 	ctx_global = ctx;
 
@@ -6481,7 +6486,6 @@ static int __init lite_internal_init_module(void)
 
 static void __exit lite_internal_cleanup_module(void)
 {
-	//unregister_chrdev(lite_dev,"lite_mmaptest");
 	cdev_del(&c_dev);
 	device_destroy(cl, lite_dev_num);
 	class_destroy(cl);
