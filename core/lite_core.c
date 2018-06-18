@@ -242,19 +242,17 @@ static __always_inline pte_t *lite_get_pte(struct mm_struct *mm, unsigned long a
  */
 int lite_check_page_continuous(void *local_addr, int size, unsigned long *answer) //20ns
 {
-	//unsigned long phys_addr_base;
 	pte_t *pte;
 	struct page *page;
 
 	unsigned long ret_phys_addr;
 	unsigned long test_phys_addr;
 	void *test_addr;
-	//if(size > 4096*4)
-	//	return 0;
 
 	pte = lite_get_pte(current->mm, (unsigned long)local_addr);
-	if(!pte)
+	if (!pte)
 		return 0;
+
 	page = pte_page(*pte);
 	ret_phys_addr = page_to_phys(page) + (((uintptr_t)local_addr)&LITE_LINUX_PAGE_OFFSET);
 
@@ -1888,9 +1886,7 @@ int client_reply_message(ltc *ctx, void *addr, int size, uintptr_t descriptor, i
 	unsigned long phys_addr;
 	void *real_addr;
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
-	//test12 start, ends in client_send_message_with_rdma_write_with_imm_request before post_send (55ns (4K), 56ns(8))
-        //printk(KERN_CRIT "%s: reply message to %d %d\n", __func__, tmp->source_node_id, tmp->store_semaphore);
-        //
+
         if(tmp->source_node_id != ctx->node_id)//regular remote send-reply
         {
                 re_connection_id = client_get_connection_by_atomic_number(ctx, tmp->source_node_id, priority);
@@ -4385,32 +4381,35 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
         else
                 local_flag = 0;
 
-	if (size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE) {
-		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n",
+	if (size + sizeof(struct imm_message_metadata) > IMM_MAX_SIZE) {
+		pr_crit("%s: message size %d + header is larger than max size %d\n",
 			__func__, size, IMM_MAX_SIZE);
-		return -1;
+		return -EINVAL;
 	}
 
 	if (!addr) {
 		printk(KERN_CRIT "%s: null input addr\n", __func__);
-		return -2;
+		return -EINVAL;
 	}
 
 	if (port > IMM_MAX_PORT-1) {
-		printk(KERN_CRIT "%s: port %d too large < %d\n", __func__, port, IMM_MAX_PORT);
-		return REG_PORT_TOO_LARGE;
+		printk(KERN_CRIT "%s: port %d too large < %d\n",
+			__func__, port, IMM_MAX_PORT);
+		return -EINVAL;
 	}
 
-	tar_offset_start = client_get_offset_and_mr_by_length(ctx, target_node, port, real_size, &remote_mr);//40ns
-	if (tar_offset_start==REG_DO_QUERY_FIRST) {
-		printk(KERN_CRIT "%s: can't find node %d port %d\n", __func__, target_node, port);
+	tar_offset_start = client_get_offset_and_mr_by_length(ctx, target_node,
+							      port, real_size, &remote_mr);
+	if (tar_offset_start == REG_DO_QUERY_FIRST) {
+		printk(KERN_CRIT "%s: can't find node %d port %d\n",
+			__func__, target_node, port);
 		return REG_DO_QUERY_FIRST;
 	}
 
-        if(local_flag)
+        if (local_flag)
                 connection_id = -1;
         else
-		connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);//25-40ns
+		connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
 
         imm_data = IMM_SEND_REPLY_SEND | port << IMM_PORT_PUSH_BIT | tar_offset_start;
         if (ret_addr) {
@@ -4468,6 +4467,11 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
                         if (ret_length && userspace_send_continuous &&
 			    userspace_reply_continuous &&
 			    lite_check_page_continuous(ret_length, sizeof(int), &phys_addr)) {
+				/*
+				 * hmm..
+				 * this is where kernel and userspace polling begins..
+				 * I mean, the set of variable!
+				 */
 			    	userspace_retlength_continuous = 1;
                                 real_retlength_vaddr = phys_to_virt(phys_addr);
                                 *(int *)real_retlength_vaddr = SEND_REPLY_WAIT;
@@ -4496,23 +4500,34 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 				LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header,
 				LITE_USERSPACE_FLAG, 0, NULL, 0);
 
-                        if(userspace_retlength_continuous)
+			/*
+			 * Okay, HACK!!
+			 *
+			 * Here is the case you want to have the fast RPC, where userspace poll the
+			 * ctx->imm_store_block_queue[store_id], which has been replaced above!
+			 */
+                        if (userspace_retlength_continuous)
                                 return 0;
+
                 } else {
 			/*
 			 * local_sendreply will only be in this category
 			 */
                         if(!local_flag) {
+				/*
+				 * This part is KERNELSPACE_FLAG because we are using kernel virtual address here
+				 */
 				client_send_message_with_rdma_write_with_imm_request(ctx,
 					connection_id, remote_rkey, (uintptr_t)remote_addr,
 					real_addr, size, tar_offset_start, imm_data,
 					LITE_SEND_MESSAGE_HEADER_AND_IMM, output_header,
 					LITE_KERNELSPACE_FLAG, 0, NULL, 0);
-				//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
                         } else {
+				/*
+				 * This part is KERNELSPACE_FLAG because we are using kernel virtual address here
+				 */
 				client_send_message_with_rdma_emulated_for_local(ctx,
 					port, real_addr, size, output_header, LITE_USERSPACE_FLAG);
-				//This part is KERNELSPACE_FLAG because we are using kernel virtual address here
                         }
                 }
 	} else {
@@ -4533,6 +4548,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 #ifdef CPURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		cpu_relax();
+
 #elif defined(ADAPTIVE_MODEL)
 	if(size<=IMM_SEND_SLEEP_SIZE_THRESHOLD)//If size is small, it should do busy wait here, or the waiting time is too long, it should jump to sleep queue
 	{
@@ -4543,6 +4559,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 			//cpu_relax();
 			schedule();
 	}
+
 	if(wait_send_reply_id==SEND_REPLY_WAIT)//do checking here, if the size is small and time is short, it should get wait_send_reply_id from the above if loop. Else do wait here.
 	{
 		while(wait_send_reply_id==SEND_REPLY_WAIT)
@@ -4642,6 +4659,7 @@ int client_send_message_with_rdma_emulated_for_local(ltc *ctx, int port, void *a
  * @force_poll_flag: force polling or avoid polling if possible
  *
  * RDMA Write with Immediate
+ * Used by RPC.
  */
 int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connection_id,
 			uint32_t input_mr_rkey, uintptr_t input_mr_addr, void *addr,
@@ -4661,7 +4679,6 @@ int client_send_message_with_rdma_write_with_imm_request(ltc *ctx, int connectio
         int i;
 
 retry_send_imm_request:
-
 	memset(&rdma_wr, 0, sizeof(rdma_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 
@@ -4670,107 +4687,94 @@ retry_send_imm_request:
 
 	rdma_wr.remote_addr = (uintptr_t) (input_mr_addr+offset);
 	rdma_wr.rkey = input_mr_rkey;
-        if(sge_length)//sge design process here, only send side could do sge request
-        {
-                if(s_mode!= LITE_SEND_MESSAGE_HEADER_AND_IMM)
-                {
+
+	/*
+	 * sge design process here, only send side could do sge request
+	 * Anyway, RPC will not work here. So SKIP this if!
+	 */
+        if (sge_length) {
+                if (s_mode != LITE_SEND_MESSAGE_HEADER_AND_IMM) {
 			printk(KERN_CRIT "%s: wrong mode %d - in sge design\n", __func__, s_mode);
 			return -1;
                 }
+
+		/*
+		 * XXX:
+		 * What is this?? doing blocked poll every few rpcs?
+		 */
                 read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
-                if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
-                {
+                if (read_num % (RECV_DEPTH / 4) == 0 || force_poll_flag) {
                         wr->wr_id = (uint64_t)&poll_status;
                         wr->send_flags = IB_SEND_SIGNALED;
                         flag = 1;
-                }
-                else
-                {
-                        wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
+                } else {
+			/* get the real wait_send_reply_id address from store information */
+                        wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];
                         wr->send_flags = 0;
                 }
 
 		wr->num_sge = 1 + sge_length;
 		wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
-		temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
-
+		temp_header_addr = client_ib_reg_mr_addr(ctx,
+					header, sizeof(struct imm_message_metadata));
 		wr->ex.imm_data = imm;
 
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
 
-                //It's always a kernel space call. Therefore
-#ifdef LITE_GET_SIZE
-			int total_size = 0;
-#endif
-                for(i=0;i<sge_length;i++)
-                {
-                        temp_addr = client_ib_reg_mr_addr(ctx, input_atomic[i].vaddr, input_atomic[i].len);
+                for (i=0;i<sge_length;i++) {
+                        temp_addr = client_ib_reg_mr_addr(ctx,
+					input_atomic[i].vaddr, input_atomic[i].len);
 			sge[i+1].addr = temp_addr;
 			sge[i+1].length = input_atomic[i].len;
 			sge[i+1].lkey = ctx->proc->lkey;
-#ifdef LITE_GET_SIZE
-			total_size = total_size + input_atomic[i].len;
-#endif
                 }
-#ifdef LITE_GET_SIZE
-			printk(KERN_CRIT "[%s] size: %d\n", total_size);
-#endif
-
-        }
-        else
-        {
-                if(s_mode == LITE_SEND_MESSAGE_HEADER_AND_IMM)
-                {
+        } else {
+                if (s_mode == LITE_SEND_MESSAGE_HEADER_AND_IMM) {
+			/*
+			 * HACK!!!
+			 * This is where RPC will walk into..
+			 */
                         read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
-                        if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
-                        {
+                        if (read_num%(RECV_DEPTH/4)==0 || force_poll_flag) {
                                 wr->wr_id = (uint64_t)&poll_status;
                                 wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
-                        }
-                        else
-                        {
-                                wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];//get the real wait_send_reply_id address from store information
+                        } else {
+				/* get the real wait_send_reply_id address from store information */
+                                wr->wr_id = (uint64_t)ctx->imm_store_semaphore[header->store_semaphore];
                                 wr->send_flags = 0;
                         }
 
                         wr->num_sge = 2;
                         wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
-                        temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
+                        temp_header_addr = client_ib_reg_mr_addr(ctx, header,
+						sizeof(struct imm_message_metadata));
 
                         wr->ex.imm_data = imm;
 
                         sge[0].addr = temp_header_addr;
                         sge[0].length = sizeof(struct imm_message_metadata);
                         sge[0].lkey = ctx->proc->lkey;
-                        if(userspace_flag == LITE_KERNELSPACE_FLAG)
-                        {
+
+                        if (userspace_flag == LITE_KERNELSPACE_FLAG) {
                                 temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
                                 sge[1].addr = temp_addr;
-                        }
-                        else
-                        {
+                        } else {
                                 sge[1].addr = (uintptr_t)addr;
                         }
                         sge[1].length = size;
                         sge[1].lkey = ctx->proc->lkey;
-                }
-                else if(s_mode == LITE_SEND_MESSAGE_IMM_ONLY)
-                {
-                        //read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
-                        //if(read_num%(RECV_DEPTH/4)==0 || force_poll_flag)
-			if(1)
-                        {
+
+                } else if (s_mode == LITE_SEND_MESSAGE_IMM_ONLY) {
+			if (1) {
                                 wr->wr_id = (uint64_t)&poll_status;
                                 wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
-                        }
-                        else
-                        {
+                        } else {
                                 wr->wr_id = 0;
                                 wr->send_flags = 0;
                         }
@@ -4790,36 +4794,37 @@ retry_send_imm_request:
                         }
                         sge[0].length = size;
                         sge[0].lkey = ctx->proc->lkey;
-                }
-                else
-                {
-                        printk(KERN_CRIT "%s: wrong mode %d - testing function\n", __func__, s_mode);
+                } else {
+                        printk(KERN_CRIT "%s: wrong mode %d - testing function\n",
+				__func__, s_mode);
                         return -1;
                 }
         }
-	//test5 ends
-	//test12 ends
-	lite_dp("ib_post_send %d", 0);
-	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 
-	if(!ret)
-	{
-		if(flag==1)
-		{
-			client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
-			if(poll_status)
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
+	if (!ret) {
+		/*
+		 * HACK!!!
+		 *
+		 * This is the fucking poll flag.
+		 * flag==1, means it is a blocking RPC call
+		 * Otherwise, you can do async RPC.
+		 */
+		if (flag == 1) {
+			client_internal_poll_sendcq(ctx->send_cq[connection_id],
+				connection_id, &poll_status);
+			if (poll_status) {
+				/* why retry? */
+				WARN_ON_ONCE(1);
 				goto retry_send_imm_request;
+			}
 		}
-	}
-	else
-	{
-		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
-		//goto retry_send_imm_request;
+	} else {
+		printk(KERN_INFO "%s: send fail %d ret %d\n",
+			__func__, connection_id, ret);
 		return -2;
 	}
-	//spin_unlock(&connection_lock[connection_id]);
 	return 0;
-
 }
 
 /**

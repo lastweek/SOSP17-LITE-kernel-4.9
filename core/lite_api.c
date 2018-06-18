@@ -1020,27 +1020,32 @@ EXPORT_SYMBOL(liteapi_send_reply_imm);
  * @ret_length: keep the returned length of the message (for fast_receive)
  * @max_ret_size_and_priority: the combination of max_ret_size and priority (inputted from LITE-userspace library)
  * return: length of received message
+ *
+ * HACK!!!
+ * This is the hook for user space send_reply,
+ * and it is used by a lot different variations.
  */
 int liteapi_send_reply_imm_userspace(int target_node, int size_port, void *addr,
 				     void *ret_addr, void *ret_length,
 				     unsigned int max_ret_size_and_priority)
 {
-	ltc *ctx = LITE_ctx;
 	int ret;
-	int priority = max_ret_size_and_priority&IMM_MAX_PRIORITY_BITMASK;
+	ltc *ctx = LITE_ctx;
+	int priority = max_ret_size_and_priority & IMM_MAX_PRIORITY_BITMASK;
 	unsigned long priority_jiffies;
 
-	if(priority)
+	if (priority)
 		liteapi_priority_handling(priority, PRIORITY_START, &priority_jiffies, PRIORITY_SR);
 
 	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node,
-			size_port&IMM_MAX_PORT_BITMASK,
+			size_port & IMM_MAX_PORT_BITMASK,
 			addr, size_port >> IMM_MAX_PORT_BIT,
 			ret_addr, max_ret_size_and_priority >> IMM_MAX_PRIORITY_BIT,
 			ret_length, 1, priority);
 
-	if(priority)
+	if (priority)
 		liteapi_priority_handling(priority, PRIORITY_END, &priority_jiffies, PRIORITY_SR);
+
 	return ret;
 }
 EXPORT_SYMBOL(liteapi_send_reply_imm_userspace);
