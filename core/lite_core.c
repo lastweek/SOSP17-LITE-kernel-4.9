@@ -1246,16 +1246,6 @@ int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum i
 			.port_num	= port
 		}
 	};
-        /*if(is_roce) {
-                //attr.ah_attr.grh.dgid.global.interface_id = dest.gid_global_interface_id;
-                //attr.ah_attr.grh.dgid.global.subnet_prefix = dest.gid_global_subnet_prefix;
-                attr.ah_attr.grh.dgid.global.interface_id = 0;
-                attr.ah_attr.grh.dgid.global.subnet_prefix = 1;
-                attr.ah_attr.grh.sgid_index = 0;
-                attr.ah_attr.grh.hop_limit = 1;
-                attr.ah_attr.dlid = 0;
-                attr.ah_attr.ah_flags = 1;//attr.ah_attr.is_global = 1;
-        }*/
 
 	if(SGID_INDEX != -1)
 	{
@@ -1286,6 +1276,7 @@ int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum i
 	attr.rnr_retry	= 7;
 	attr.sq_psn	= my_psn;
 	attr.max_rd_atomic = 10; //was 1
+
 	if(ib_modify_qp(ctx->qp[connection_id], &attr,
 				IB_QP_STATE	|
 				IB_QP_TIMEOUT	|
@@ -1327,12 +1318,8 @@ int client_add_newnode(ltc *ctx, char *msg)
 
 	down(&add_newnode_mutex);
 
-	//printk(KERN_ALERT "%s: PID: %d start do add_node with %s\n",
-	//	__func__, current->pid, msg);
-
 	client_msg_to_lite_dest(msg, &rem_dest);
 	cur_connection = (rem_dest.node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_dest.node_id]);
-	//printk(KERN_ALERT "%s: cur connection %d\n", __func__, cur_connection);
 	client_msg_to_lite_dest(my_QPset[cur_connection].server_information_buffer, &my_dest);
 
 #ifdef PRIORITY_IMPLEMENTATION_RESOURCE
@@ -1583,20 +1570,6 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 		return SEND_REPLY_PORT_NOT_OPENED;
 
 	spin_lock(&ctx->imm_perport_lock[port]);
-	/*wait_event_interruptible(wq, !list_empty(&(request_list.list)));*/
-	/*
-	while(list_empty(&(ctx->imm_waitqueue_perport[port].list)))
-	{
-		schedule();
-	}
-
-	//Get header message from list
-	spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
-	new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
-	//printk(KERN_CRIT "%s: get %p\n", __func__, new_request);
-	list_del(&new_request->list);
-	spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
-	*/
 
         //Generate descriptor for future reply message, this part takes around 40-60ns, sometimes 100ns
 	descriptor = (struct imm_message_metadata *)kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
@@ -1607,6 +1580,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 		spin_unlock(&ctx->imm_perport_lock[port]);
                 return SEND_REPLY_FAIL;
 	}
+
 	//Have a single try first, it it's a block call, have infinite try
 	if(likely(block_call))
 	{
@@ -3189,6 +3163,8 @@ int client_poll_cq_pass(struct thread_pass_struct *input)
  * client_poll_cq - polling the CQ (for RC QP) to get IMM completion
  * @ctx: lite context
  * @target_cq: target polling CQ
+ *
+ * ...
  */
 int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 {
@@ -3198,9 +3174,10 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
         int temp_tar;
         struct imm_header_from_cq_to_port *tmp;
         int cq_num=-1;
-	#ifdef NOTIFY_MODEL
+#ifdef NOTIFY_MODEL
 	int test_result=0;
-	#endif
+#endif
+
 	allow_signal(SIGKILL);
         for(i=0;i<NUM_POLLING_THREADS;i++)
         {
@@ -3212,37 +3189,30 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
         }
         if(cq_num==-1)
                 printk(KERN_CRIT "%s: [significant error] initialize cq %p fail\n", __func__, target_cq);
-	//set_current_state(TASK_INTERRUPTIBLE);
 
-	while(1)
-	{
+	while(1) {
 #ifdef BUSY_POLL_MODEL
+		/*
+		 * The default model
+		 */
 		do{
-			//set_current_state(TASK_RUNNING);
 			ne = ib_poll_cq(target_cq, NUM_POLLING_WC, wc);
 			if(ne < 0)
 			{
 				printk(KERN_ALERT "poll CQ failed %d\n", ne);
 				return 1;
 			}
-			if(ne==0)
-			{
-				//if(ne >= 1)
-				//	break;
+
+			if(ne==0) {
 				schedule();
                                 ctx->imm_cq_is_available[cq_num]=1;
-				//cpu_relax();
-				//set_current_state(TASK_INTERRUPTIBLE);
 				if(kthread_should_stop())
 				{
 					printk(KERN_ALERT "Stop cq and return\n");
 					return 0;
 				}
 			}
-			//msleep(1);
 		}while(ne < 1);
-		//test7 starts, ends in liteapi_receive_message_userspace which takes 306ns
-		//test8 starts, ends in later this function to test demultiplex latency, 29ns
 #endif
 #ifdef NOTIFY_MODEL
 		ne = ib_poll_cq(target_cq, NUM_POLLING_WC, wc);
@@ -3272,53 +3242,47 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 			return 0;
 		}
 #endif
-		//test13 starts ends in lite_liteapi.c to trace between poll and return to user (210ns (4K) 187ns(8))
+
                 ctx->imm_cq_is_available[cq_num]=0;
-		for(i=0;i<ne;++i)
-		{
+		for (i=0;i<ne;++i) {
                         if(unlikely(wc[i].status!= IB_WC_SUCCESS))
 			        printk(KERN_ALERT "%s: failed status (%d) %s for wr_id %d\n",
 					__func__, wc[i].status, ib_wc_status_msg(wc[i].status), (int) wc[i].wr_id);
+
                         switch((int)wc[i].opcode)
                         {
                                 case IB_WC_RECV_RDMA_WITH_IMM:
                                 {
-                                        //int node_id = client_find_node_id_by_qpnum(ctx, wc[i].qp->qp_num); //Move this into post-receive after basic impl
                                         int node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
                                         int port;
                                         int offset;
-                                        //	trace_start = ktime_get();
-                                        //	trace_end = ktime_get();
-                                        //	trace_count++;
-                                        //	trace_sum += ktime_to_ns(ktime_sub(trace_end, trace_start));
-                                        //	printk(KERN_CRIT "run %d for %lld ns\n", trace_count, trace_sum/trace_count);
-                                        if(wc[i].wc_flags&&IB_WC_WITH_IMM)
+
+                                        if (wc[i].wc_flags && IB_WC_WITH_IMM)
                                         {
-                                                if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
+                                                if (wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)
                                                 {
                                                         int semaphore;
                                                         int opcode;
+
                                                         printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
                                                         semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
                                                         opcode = IMM_GET_OPCODE_NUMBER(wc[i].ex.imm_data);
-                                                        //printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
                                                         *(int *)(ctx->imm_store_semaphore[semaphore]) = -(opcode);
                                                         ctx->imm_store_semaphore[semaphore] = NULL;
                                                         clear_bit(semaphore, ctx->imm_store_semaphore_bitmap);
                                                 }
+
                                                 else if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) // only send
                                                 {
-                                                        //char *tmp_check = kzalloc(1024, GFP_KERNEL);
-                                                        //It needs average 150ns to pass a message into event_queue
                                                         offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
                                                         port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
-                                                        //if(atomic_read(&ctx->imm_perport_reg_num[port])<0)//this port is closed
                                                         if(unlikely(ctx->imm_perport_reg_num[port]<0))
                                                         {
-                                                                printk(KERN_CRIT "%s: from node %d access to port %d is banned. This should not happen since sender should not be able to send this request out\n", __func__, node_id, port);
+                                                                printk(KERN_CRIT "%s: from node %d access to port %d is banned."
+									"This should not happen since sender should not be able to send this request out\n",
+									__func__, node_id, port);
                                                         }
-                                                        //printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
 
                                                         spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
                                                         if(!list_empty(&ctx->imm_wait_userspace_perport[port].list))//someone is waiting inside userspace
@@ -3331,10 +3295,6 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                                         }
                                                         else
                                                         {
-                                                                //tmp = (struct imm_header_from_cq_to_port *)kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
-                                                                //tmp->source_node_id = node_id;
-                                                                //tmp->offset = offset;
-                                                                //list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
                                                                 temp_tar = ctx->imm_waitqueue_perport_count_poll[port]%IMM_ROUND_UP;
                                                                 tmp = ctx->imm_waitqueue_perport[port];
                                                                 tmp[temp_tar].source_node_id = node_id;
@@ -3346,7 +3306,6 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                                         #ifdef RECV_WAITQUEUE_MODEL
                                                                 wake_up_interruptible(&ctx->imm_receive_block_queue[port]);
                                                         #endif
-							//test8 ends
                                                 }
                                                 else //handle reply
                                                 {
@@ -3373,13 +3332,11 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
                                                         ctx->imm_store_semaphore_task[semaphore]=NULL;
                                                         #endif
 
-
-                                                        //spin_lock(&ctx->imm_store_semaphore_lock[semaphore]);
                                                         ctx->imm_store_semaphore[semaphore] = NULL;
-                                                        //spin_unlock(&ctx->imm_store_semaphore_lock[semaphore]);
                                                         clear_bit(semaphore, ctx->imm_store_semaphore_bitmap);
                                                 }
                                         }
+
                                         //if(wc[i].wr_id%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
                                         if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
                                         {
@@ -5968,24 +5925,29 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	//Start handling completion cq
 	//This part need to be done on Monday
 
-	//thread_poll_cq = (struct task_struct **)kmalloc(NUM_POLLING_THREADS * sizeof(struct task_struct *), GFP_KERNEL);
-	thread_poll_cq = (struct task_struct **)kmalloc((NUM_POLLING_THREADS+2) * sizeof(struct task_struct *), GFP_KERNEL);
-	for(i=0;i<NUM_POLLING_THREADS;i++)
-	{
+	thread_poll_cq = kmalloc((NUM_POLLING_THREADS+2) * sizeof(struct task_struct *), GFP_KERNEL);
+
+	/*
+	 * NUM_POLLING_THREADS is 1
+	 * and this is a recv_cq for all QP
+	 */
+	for (i = 0; i < NUM_POLLING_THREADS; i++) {
 		char thread_name[32]={};
 		struct thread_pass_struct *thread_pass_poll_cq = kmalloc(sizeof(struct thread_pass_struct), GFP_KERNEL);
-		sprintf(thread_name, "LT_cq_poller%d", i);
+
+		sprintf(thread_name, "LT_recv_cq_poller%d", i);
 		thread_pass_poll_cq->ctx = ctx;
 		thread_pass_poll_cq->target_cq = ctx->cq[i];
+
 		thread_poll_cq[i] = kthread_create_on_node((void *)client_poll_cq_pass, thread_pass_poll_cq, LITE_NUMA_NODE, thread_name);
 		if(IS_ERR(thread_poll_cq[i]))
 		{
 			printk(KERN_ALERT "fail to do poll cq %d\n", i);
 			return 0;
 		}
-                //kthread_bind(thread_handler, i);
 		wake_up_process(thread_poll_cq[i]);
 	}
+
 	//for UD polling
 	{
 		char thread_name[32]={};
