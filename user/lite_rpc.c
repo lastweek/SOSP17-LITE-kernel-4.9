@@ -116,18 +116,18 @@ int init_log(int remote_node)
 	int j, k;
 	int *random_idx;
 	struct timespec start, end;
+	char *name = malloc(16);
         int temp[32];
+
+	sprintf(name, "test.1");
+       	userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
+	printf("finish registeration\n");
 
 	if(remote_node == 0)//receiver mode
 	{
 		pthread_t threads[64];
-		
-		char *name = malloc(16);
 		int ret;
 
-		sprintf(name, "test.1");
-        	ret = userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
-		printf("finish registeration\n");
 
                 userspace_liteapi_dist_barrier(2);
 	
