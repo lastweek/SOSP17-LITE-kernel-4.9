@@ -15,8 +15,6 @@
 #include <malloc.h>
 #include "lite-lib.h"
 
-
-
 const int run_times = 10;
 
 int testsize[7]={8,8,64,512,1024,2048,4096};
@@ -26,12 +24,9 @@ int write_mode = 0;
 int thread_node;
 int thread_send_num=1;
 int thread_recv_num=1;
-pthread_mutex_t count_mutex;
 int count = 0;
 int go = 0;
-pthread_mutex_t end_count_mutex;
 int end_count = 0;
-
 
 void *thread_send_lat(void *tmp)
 {
@@ -43,7 +38,6 @@ void *thread_send_lat(void *tmp)
         int ret_length;
 	int i,j;
 	struct timespec start, end;
-	double total_lat;
 	double *record=calloc(run_times, sizeof(double));
 	uintptr_t descriptor;
 
@@ -110,35 +104,35 @@ void *thread_recv(void *tmp)
 	printf("after send_reply\n");
 }
 
-int init_log(int remote_node)
+void run(int remote_node)
 {
-        uint64_t xact_ID;
 	int j, k;
-	int *random_idx;
 	struct timespec start, end;
-	char *name = malloc(16);
+	char name[32] = {'\0'};
         int temp[32];
 
 	sprintf(name, "test.1");
        	userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
-	printf("finish registeration\n");
+	printf("Finish app registeration..\n");
 
-	if(remote_node == 0)//receiver mode
-	{
+	if (remote_node == 0) {
+		/*
+		 * Receiver mode
+		 */
 		pthread_t threads[64];
 		int ret;
 
-
                 userspace_liteapi_dist_barrier(2);
-	
+		userspace_liteapi_query_port(1, 1);
+
                 temp[0]=1; 
 		pthread_create(&threads[0], NULL, thread_recv, &temp[0]);
 		pthread_join(threads[0], NULL);
-	}
-	else//send to remote node
-	{
+	} else {
+		/*
+		 * Sender mode
+		 */
 		struct timespec start, end;
-		double total_lat[7];
 
 		pthread_t threads[64];
 
@@ -149,30 +143,16 @@ int init_log(int remote_node)
 
                 temp[0] = 1;
                 pthread_create(&threads[0], NULL, thread_send_lat, &temp[0]);
-		for(j=0;j<7;j++)
-		{
-			pthread_mutex_lock(&count_mutex);
-			count++;
-			pthread_mutex_unlock(&count_mutex);
-		}
 		pthread_join(threads[0], NULL);
 	}
-
-	return 0;
 }
 
-int internal_value=0;
 int main(int argc, char *argv[])
 {
-	if(argc!=2)
-	{
+	if (argc!=2) {
 		printf("./example_userspace_sr.o REMOTE_NODE\n");
 		return 0;
 	}
-
-	pthread_mutex_init(&count_mutex, NULL);
-	pthread_mutex_init(&end_count_mutex, NULL);
-	init_log(atoi(argv[1]));
-
+	run(atoi(argv[1]));
 	return 0;
 }
