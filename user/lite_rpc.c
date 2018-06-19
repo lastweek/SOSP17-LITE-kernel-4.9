@@ -13,6 +13,7 @@
 #include <sys/syscall.h>
 #include <stdbool.h>
 #include <malloc.h>
+#include <getopt.h>
 #include "lite-lib.h"
 
 const int run_times = 10;
@@ -104,10 +105,8 @@ void *thread_recv(void *tmp)
 	printf("after send_reply\n");
 }
 
-void run(int remote_node)
+void run(bool server_mode, int remote_node)
 {
-	int j, k;
-	struct timespec start, end;
 	char name[32] = {'\0'};
         int temp[32];
 
@@ -115,12 +114,8 @@ void run(int remote_node)
        	userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
 	printf("Finish app registeration..\n");
 
-	if (remote_node == 0) {
-		/*
-		 * Receiver mode
-		 */
+	if (server_mode) {
 		pthread_t threads[64];
-		int ret;
 
                 userspace_liteapi_dist_barrier(2);
 		userspace_liteapi_query_port(1, 1);
@@ -129,17 +124,12 @@ void run(int remote_node)
 		pthread_create(&threads[0], NULL, thread_recv, &temp[0]);
 		pthread_join(threads[0], NULL);
 	} else {
-		/*
-		 * Sender mode
-		 */
-		struct timespec start, end;
-
 		pthread_t threads[64];
 
 		thread_node = remote_node;
 
                 userspace_liteapi_dist_barrier(2);
-		userspace_liteapi_query_port(remote_node,1);
+		userspace_liteapi_query_port(remote_node, 1);
 
                 temp[0] = 1;
                 pthread_create(&threads[0], NULL, thread_send_lat, &temp[0]);
@@ -147,12 +137,68 @@ void run(int remote_node)
 	}
 }
 
+static void usage(const char *argv0)
+{
+	printf("Usage:\n");
+	printf("  %s -s                    start a server and wait for connection\n", argv0);
+	printf("  %s -n <nid>              connect to server at <nid>\n", argv0);
+	printf("\n");
+	printf("Options:\n");
+	printf("  -s, --server              start a server\n");
+	printf("  -n, --remote_nid=<nid>    remote server_id\n");
+}
+
+
+static struct option long_options[] = {
+	{ .name = "server",	.has_arg = 0, .val = 's' },
+	{ .name = "remote_nid",	.has_arg = 1, .val = 'n' },
+	{}
+};
+
 int main(int argc, char *argv[])
 {
-	if (argc!=2) {
-		printf("./example_userspace_sr.o REMOTE_NODE\n");
-		return 0;
+	bool server_mode = false;
+	unsigned int remote_nid = -1;
+
+	while (1) {
+		int c;
+
+		c = getopt_long(argc, argv, "n:s",
+				long_options, NULL);
+
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 's':
+			server_mode = true;
+			break;
+		case 'n':
+			remote_nid = strtoul(optarg, NULL, 0);
+			if (remote_nid > 16) {
+				usage(argv[0]);
+				return -1;
+			}
+			break;
+		default:
+			usage(argv[0]);
+			return -1;
+		};
 	}
-	run(atoi(argv[1]));
+
+	if (!server_mode && (remote_nid == -1)) {
+		usage(argv[0]);
+		return -1;
+	} else if (server_mode && (remote_nid != -1)) {
+		usage(argv[0]);
+		return -1;
+	}
+
+	if (server_mode)
+		printf("RPC server, waiting for connection..\n");
+	else
+		printf("RPC client, connect to server at %d\n", remote_nid);
+
+	run(server_mode, remote_nid);
 	return 0;
 }
