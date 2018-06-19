@@ -107,18 +107,18 @@ void *thread_recv(void *tmp)
 
 void run(bool server_mode, int remote_node)
 {
-	char name[32] = {'\0'};
         int temp[32];
 
-	sprintf(name, "test.1");
-       	userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
-	printf("Finish app registeration..\n");
-
 	if (server_mode) {
+		char name[32] = {'\0'};
 		pthread_t threads[64];
 
+		sprintf(name, "test.1");
+       		userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
+		printf("Finish app registeration..\n");
+
                 userspace_liteapi_dist_barrier(2);
-		userspace_liteapi_query_port(1, 1);
+		printf("Pass dist barrier..\n");
 
                 temp[0]=1; 
 		pthread_create(&threads[0], NULL, thread_recv, &temp[0]);
@@ -129,6 +129,8 @@ void run(bool server_mode, int remote_node)
 		thread_node = remote_node;
 
                 userspace_liteapi_dist_barrier(2);
+		printf("Pass dist barrier..\n");
+
 		userspace_liteapi_query_port(remote_node, 1);
 
                 temp[0] = 1;

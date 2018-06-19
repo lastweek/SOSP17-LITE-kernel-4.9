@@ -586,8 +586,6 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	for(i=0;i<ctx->num_node;i++)
 		atomic_set(&ctx->atomic_request_num_high[i], -1);
 
-	ctx->recv_num = kzalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
-
 	atomic_set(&ctx->num_alive_nodes, 1);
 	atomic_set(&ctx->parallel_thread_num,0);
 	atomic_set(&ctx->alive_connection, 0);

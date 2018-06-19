@@ -88,7 +88,7 @@ static void ibv_add_one(struct ib_device *device)
 	pr_info("%s(): liteapi_dev=%p(%s) device=%p(%s)\n",
 		__func__, liteapi_dev, liteapi_dev ? liteapi_dev->name : " ", device, device->name);
 
-#if 0
+#if 1
 	if (liteapi_dev) {
 		pr_info(" skip\n");
 		return;
@@ -1465,26 +1465,32 @@ uint64_t liteapi_dist_barrier(unsigned int check_num)
 		struct timespec ts, te, diff;
 		getnstimeofday(&ts);
 	#endif
+
+	pr_crit("%s(): num_alive_nodes %d\n", __func__, num_alive_nodes);
 	for(i=1;i<=num_alive_nodes;i++)//skip CD
 	{
                 unsigned long j0,j1,delay;
-                delay = msecs_to_jiffies(1000); /* 20 msec delay */
+
+                delay = msecs_to_jiffies(10000);
 		if(i==ctx->node_id)
 			continue;
+
 	        wait_send_reply_id = SEND_REPLY_WAIT;
 		tempaddr = client_ib_reg_mr_addr(ctx, &source, sizeof(int));
-barrier_resend:
+
 		client_send_message_sge_UD(ctx, i, MSG_DIST_BARRIER, (void *)tempaddr, sizeof(int), (uint64_t)&output, (uint64_t)&wait_send_reply_id, priority);
                 j0 = jiffies;
                 j1 = j0 + delay;
+
 	        while(wait_send_reply_id==SEND_REPLY_WAIT&&(time_before(jiffies, j1)))
 			cpu_relax();
                 if(wait_send_reply_id == SEND_REPLY_WAIT)
                 {
-                        printk(KERN_CRIT "%s: lost packet after 1000 msecs\n", __func__);
-                        goto barrier_resend;
+			pr_crit("dist barrier timeout\n");
+			return -ETIMEDOUT;
                 }
 	}
+
 	#ifdef LITE_GET_TIME
 		getnstimeofday(&te);
 		diff = timespec_sub(te,ts);
