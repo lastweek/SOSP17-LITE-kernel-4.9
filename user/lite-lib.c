@@ -147,7 +147,6 @@ userspace_liteapi_send_reply_imm_fast(int target_node, unsigned int port, void *
 	 * This is where userspace poll when a RPC finished.
 	 */
         while (*ret_length == SEND_REPLY_WAIT) {
-		fprintf(stderr, "we got one here\n");
 		;
 	}
 

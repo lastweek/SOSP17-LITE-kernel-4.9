@@ -16,24 +16,40 @@
 #include <getopt.h>
 #include "lite-lib.h"
 
+/*
+ * lite rpc max port: 64
+ * each thread pair need 2 ports
+ */
+
 const int run_times = 10;
 
 int testsize[7]={8,8,64,512,1024,2048,4096};
 
 int test_MB_size;
 int write_mode = 0;
-int thread_node;
 int thread_send_num=1;
 int thread_recv_num=1;
 int count = 0;
 int go = 0;
 int end_count = 0;
 
-void *thread_send_lat(void *tmp)
+int base_port = 1;
+
+struct thread_info {
+	/*
+	 * inbound_port is local's property, which is used by local to receive.
+	 * outbound_port is remote's property, which is used by remote to receive
+	 */
+	int inbound_port;
+	int outbound_port;
+
+	int remote_nid;
+};
+
+void *thread_send_lat(void *_info)
 {
+	struct thread_info *info = _info;
 	int ret;
-	int remote_node = thread_node;
-	int port = *(int *)tmp;
 	char *read = memalign(sysconf(_SC_PAGESIZE),4096*2);
 	char *write = memalign(sysconf(_SC_PAGESIZE),4096*2);
         int ret_length;
@@ -41,6 +57,9 @@ void *thread_send_lat(void *tmp)
 	struct timespec start, end;
 	double *record=calloc(run_times, sizeof(double));
 	uintptr_t descriptor;
+
+	printf("%s(): receive_message use port %d, send_reply use port %d\n",
+		__func__, info->inbound_port, info->outbound_port);
 
 	memset(write, 'A', 4096);
 	memset(read, 0, 4096);
@@ -51,16 +70,18 @@ void *thread_send_lat(void *tmp)
 	for(j=0;j<7;j++) {
 		memset(read, 0, 4096);
 
-		for(i=0;i<run_times;i++)
-		{
-			ret = userspace_liteapi_send_reply_imm_fast(remote_node, port, write, 8, read, &ret_length, 4096);
+		for(i=0;i<run_times;i++) {
+			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
+				info->outbound_port, write, 8, read, &ret_length, 4096);
 			printf("i=%d ret=%d ret_buf=%s\n", i, ret, read);
 		}
 	}
 
 	printf("Before do receive\n");
-	userspace_liteapi_receive_message_fast(port, read, 4096,
-		&descriptor, &ret_length, BLOCK_CALL);
+
+	userspace_liteapi_receive_message_fast(info->inbound_port,
+		read, 4096, &descriptor, &ret_length, BLOCK_CALL);
+
 	printf("ret_buf: %s\n", read);
 	printf("after do receive\n");
 	userspace_liteapi_reply_message(write, 8, descriptor);
@@ -69,9 +90,9 @@ void *thread_send_lat(void *tmp)
 	return 0;
 }
 
-void *thread_recv(void *tmp)
+void *thread_recv(void *_info)
 {
-	int port = *(int *)tmp;
+	struct thread_info *info = _info;
 	uintptr_t descriptor, ret_descriptor;
 	int i,j,k;
 	char *read = memalign(sysconf(_SC_PAGESIZE),4096);
@@ -80,6 +101,9 @@ void *thread_recv(void *tmp)
 	
         int ret;
 	int recv_num = thread_send_num/thread_recv_num;
+
+	printf("%s(): receive_message use port %d, send_reply use port %d\n",
+		__func__, info->inbound_port, info->outbound_port);
 
         mlock(write, 4096);
         mlock(read, 4096);
@@ -91,8 +115,8 @@ void *thread_recv(void *tmp)
 	for(j=0;j<7;j++) {
 		memset(read, 0, 4096);
                 for (i=0;i<run_times;i++) {
-                        ret = userspace_liteapi_receive_message_fast(port, read, 4096,
-				&descriptor, &ret_length, BLOCK_CALL);
+                        ret = userspace_liteapi_receive_message_fast(info->inbound_port,
+				read, 4096, &descriptor, &ret_length, BLOCK_CALL);
 
 			printf("i=%d ret=%d ret_buf=%s\n", i, ret, read);
                         userspace_liteapi_reply_message(write, testsize[j], descriptor);
@@ -100,41 +124,68 @@ void *thread_recv(void *tmp)
 	}
 
 	printf("beore send_reply\n");
-	userspace_liteapi_send_reply_imm_fast(1, port, write, 8, read, &ret_length, 4096);
+	userspace_liteapi_send_reply_imm_fast(info->remote_nid, info->outbound_port,
+		write, 8, read, &ret_length, 4096);
 	printf("ret_buf=%s\n", read);
 	printf("after send_reply\n");
 }
 
 void run(bool server_mode, int remote_node)
 {
-        int temp[32];
+	char name[32] = {'\0'};
+	pthread_t threads[64];
+	struct thread_info *info = malloc(sizeof(*info));
 
+	sprintf(name, "test.1");
+
+	/*
+	 * Okay
+	 * Server use (base_port) to receive client's RPC request
+	 * Client use (base_port + 1) to receive server's RPC request
+	 *
+	 * By doing this, server/client can both send RPC to each other.
+	 */
 	if (server_mode) {
-		char name[32] = {'\0'};
-		pthread_t threads[64];
+		info->inbound_port = base_port;
+		info->outbound_port = base_port + 1;
 
-		sprintf(name, "test.1");
-       		userspace_liteapi_register_application(1, 4096, 16, name, strlen(name));
-		printf("Finish app registeration..\n");
+		/* XXX: hardcoded */
+		info->remote_nid = 1;
+
+       		userspace_liteapi_register_application(info->inbound_port,
+			4096, 16, name, strlen(name));
 
                 userspace_liteapi_dist_barrier(2);
 		printf("Pass dist barrier..\n");
 
-                temp[0]=1; 
-		pthread_create(&threads[0], NULL, thread_recv, &temp[0]);
+		/*
+		 * Server should query client's inboud port info,
+		 * which is base_port + 1
+		 */
+		userspace_liteapi_query_port(info->remote_nid,
+					     info->outbound_port);
+
+		pthread_create(&threads[0], NULL, thread_recv, info);
 		pthread_join(threads[0], NULL);
 	} else {
-		pthread_t threads[64];
+		info->inbound_port = base_port + 1;
+		info->outbound_port = base_port;
+		info->remote_nid = remote_node;
 
-		thread_node = remote_node;
+       		userspace_liteapi_register_application(info->inbound_port,	
+			4096, 16, name, strlen(name));
 
                 userspace_liteapi_dist_barrier(2);
 		printf("Pass dist barrier..\n");
 
-		userspace_liteapi_query_port(remote_node, 1);
+		/*
+		 * Client should query server's inboud port info,
+		 * which is base_port
+		 */
+		userspace_liteapi_query_port(info->remote_nid,
+					     info->outbound_port);
 
-                temp[0] = 1;
-                pthread_create(&threads[0], NULL, thread_send_lat, &temp[0]);
+                pthread_create(&threads[0], NULL, thread_send_lat, info);
 		pthread_join(threads[0], NULL);
 	}
 }
@@ -149,7 +200,6 @@ static void usage(const char *argv0)
 	printf("  -s, --server              start a server\n");
 	printf("  -n, --remote_nid=<nid>    remote server_id\n");
 }
-
 
 static struct option long_options[] = {
 	{ .name = "server",	.has_arg = 0, .val = 's' },
