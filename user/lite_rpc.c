@@ -132,8 +132,8 @@ static inline void wait_for_completion(int *poll)
 	}
 }
 
-#define NR_ASYNC_RPC		(1000 * 1000 * 1)
-#define NR_SYNC_RPC		(1000 * 1000 * 1)
+#define NR_ASYNC_RPC		(1000 * 1000 * 10)
+#define NR_SYNC_RPC		(1000 * 1000 * 10)
 
 void test_sync_rpc_send(struct thread_info *info)
 {
@@ -147,7 +147,10 @@ void test_sync_rpc_send(struct thread_info *info)
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	poll_array = memalign(sysconf(_SC_PAGESIZE),
 		sizeof(int) * NR_SYNC_RPC);
-	memset(poll_array, 0, sizeof(int) * NR_ASYNC_RPC);
+	memset(poll_array, 0, sizeof(int) * NR_SYNC_RPC);
+	mlock(read, 4096);
+	mlock(write, 4096);
+	mlock(poll_array, sizeof(int) * NR_SYNC_RPC);
 
 	printf("Start sync rpc\n");
 
@@ -164,7 +167,7 @@ void test_sync_rpc_send(struct thread_info *info)
 	diff_ns = timespec_diff_ns(end, start);
 
 	printf("Performed #%d sync_rpc. Total %ld ns, per sync_rpc: %ld ns\n",
-		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC);
+		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC);
 
 	printf("Done sync rpc\n");
 }
@@ -177,6 +180,8 @@ void test_sync_rpc_recv(struct thread_info *info)
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	mlock(read, 4096);
+	mlock(write, 4096);
 
 	printf("Start sync test\n");
 	for (i = 0; i < NR_SYNC_RPC; i++) {
@@ -205,6 +210,9 @@ void test_async_rpc_send(struct thread_info *info)
 	poll_array = memalign(sysconf(_SC_PAGESIZE),
 		sizeof(int) * NR_ASYNC_RPC);
 	memset(poll_array, 0, sizeof(int) * NR_ASYNC_RPC);
+	mlock(read, 4096);
+	mlock(write, 4096);
+	mlock(poll_array, sizeof(int) * NR_ASYNC_RPC);
 
 	printf("Start async rpc\n");
 
@@ -236,6 +244,8 @@ void test_async_rpc_recv(struct thread_info *info)
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	mlock(read, 4096);
+	mlock(write, 4096);
 
 	printf("Start async test\n");
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
