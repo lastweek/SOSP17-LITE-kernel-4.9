@@ -42,6 +42,16 @@ struct thread_info {
 	int remote_nid;
 };
 
+#define NSEC_PER_SEC	(1000*1000*1000)
+static inline long timespec_diff_ns(struct timespec end, struct timespec start)
+{
+	long e, s;
+
+	e = end.tv_sec * NSEC_PER_SEC + end.tv_nsec;
+	s = start.tv_sec * NSEC_PER_SEC + start.tv_nsec;
+	return e - s;
+}
+
 /*
  * ret_buf is _not_ guranteed to be ready upon return.
  * Caller is responsible for polling *ret_length for completion.
@@ -87,7 +97,30 @@ static inline bool async_rpc_completed(int *poll)
 	return true;
 }
 
-#define MAX_OUTSTANDING_RPC	1024
+#define WAIT_COMPLETION_TIMEOUT_S	(5)
+
+static inline void wait_for_completion(int *poll)
+{
+	time_t start;
+	bool saved_ts = false;
+
+	while (!async_rpc_completed(poll)) {
+		time_t now;
+
+		if (!saved_ts) {
+			start = time(NULL);
+			saved_ts = true;
+		}
+
+		now = time(NULL);
+		if (now - start > WAIT_COMPLETION_TIMEOUT_S) {
+			printf("%s: timeout (%d s) at poll %p\n",
+				__func__, WAIT_COMPLETION_TIMEOUT_S, poll);
+		}
+	}
+}
+
+#define NR_ASYNC_RPC		(1000 * 1000 * 10)
 
 /*
  * Can we reuse the send buffer? Depends on when the syscall returned.
@@ -99,26 +132,35 @@ void test_async_rpc_send(struct thread_info *info)
 	int *poll_array;
 	int i, ret;
 	char *read, *write;
+	struct timespec start, end;
+	long diff_ns;
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	poll_array = memalign(sysconf(_SC_PAGESIZE),
-		sizeof(int) * MAX_OUTSTANDING_RPC);
-	memset(poll_array, 0, sizeof(int) * MAX_OUTSTANDING_RPC);
+		sizeof(int) * NR_ASYNC_RPC);
+	memset(poll_array, 0, sizeof(int) * NR_ASYNC_RPC);
 
-	for (i = 0; i < 10; i++) {
-		printf("async %2d\n", poll_array[i]);
-	}
+	printf("Start async rpc\n");
 
-	for (i = 0; i < 10; i++) {
-		*(int *)write = i + 200;
-		ret = async_rpc(info->remote_nid, info->outbound_port,
-				write, 4, read, &poll_array[i], 4096);
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	for (i = 0; i < NR_ASYNC_RPC; i++) {
+		/*
+		 * send 4 bytes 
+		 */
+		async_rpc(info->remote_nid, info->outbound_port,
+			write, 4, read, &poll_array[i], 4096);
 	}
+	clock_gettime(CLOCK_MONOTONIC, &end);
 
-	for (i = 0; i < 10; i++) {
-		printf("async %2d\n", poll_array[i]);
-	}
+	diff_ns = timespec_diff_ns(end, start);
+	for (i = 0; i < NR_ASYNC_RPC; i++)
+		wait_for_completion(&poll_array[i]);
+
+	printf("Performed #%d async_rpc, average %ld ns\n",
+		NR_ASYNC_RPC, diff_ns/NR_ASYNC_RPC);
+
+	printf("Done async rpc\n");
 }
 
 void test_async_rpc_recv(struct thread_info *info)
@@ -130,15 +172,13 @@ void test_async_rpc_recv(struct thread_info *info)
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 
-	for (i = 0; i < 10; i++) {
+	printf("Start async test\n");
+	for (i = 0; i < NR_ASYNC_RPC; i++) {
 		ret = userspace_liteapi_receive_message_fast(info->inbound_port,
 			read, 4096, &descriptor, &ret_length, BLOCK_CALL);
-
-		*(int *)write = i + 200;
         	userspace_liteapi_reply_message(write, 4, descriptor);
-		printf("%s(): read: %d write: %d\n", __func__,
-			*(int *)read, *(int *)write);
 	}
+	printf("Done async test\n");
 }
 
 int testsize[7]={8,8,64,512,1024,2048,4096};
