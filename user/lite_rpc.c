@@ -16,24 +16,48 @@
 #include <getopt.h>
 #include "lite-lib.h"
 
+#define MAX_BUF_SIZE	(1024 * 1024 * 4)
+
+/*
+ * ret_buf is _not_ guranteed to be ready upon return.
+ * Caller is responsible for polling *ret_length for completion.
+ */
+int async_rpc(int dst_nid, int dst_port, void *buf, int buf_size,
+	      void *ret_buf, int *ret_size_ptr, int max_ret_size)
+{
+	int ret;
+
+	if (buf_size >= MAX_BUF_SIZE || max_ret_size >= MAX_BUF_SIZE) {
+		fprintf(stderr, "%s: buf_size %d max_ret_size %d too big\n",
+			__func__, buf_size, max_ret_size);
+		return -EINVAL;
+	}
+
+	ret = syscall(__NR_lite_send_reply_imm,
+			dst_nid,
+			(buf_size << IMM_MAX_PORT_BIT) + dst_port,
+			buf, ret_buf, ret_size_ptr,
+			(max_ret_size << IMM_MAX_PRIORITY_BIT) + NULL_PRIORITY);
+	if (ret < 0)
+		perror("lite_send_reply syscall failed");
+	return 0;
+}
+
+/*
+ * Return true if the @poll point indicate the
+ * async RPC has completed.
+ */
+static inline bool async_rpc_completed(int *poll)
+{
+	if (*poll == SEND_REPLY_WAIT)
+		return false;
+	return true;
+}
+
 /*
  * lite rpc max port: 64
  * each thread pair need 2 ports
  */
-
-const int run_times = 10;
-
-int testsize[7]={8,8,64,512,1024,2048,4096};
-
-int test_MB_size;
-int write_mode = 0;
-int thread_send_num=1;
-int thread_recv_num=1;
-int count = 0;
-int go = 0;
-int end_count = 0;
-
-int base_port = 1;
 
 struct thread_info {
 	/*
@@ -45,6 +69,10 @@ struct thread_info {
 
 	int remote_nid;
 };
+
+int testsize[7]={8,8,64,512,1024,2048,4096};
+int run_times = 10;
+int base_port = 1;
 
 void *thread_send_lat(void *_info)
 {
@@ -94,8 +122,6 @@ void *thread_send_lat(void *_info)
                 }
 		memset(read, 0, 4096);
 	}
-
-	return 0;
 }
 
 void *thread_recv(void *_info)
@@ -159,7 +185,7 @@ void run(bool server_mode, int remote_node)
 	sprintf(name, "test.1");
 
 	/*
-	 * Okay
+	 * Okay, symmetric RPC.
 	 * Server use (base_port) to receive client's RPC request
 	 * Client use (base_port + 1) to receive server's RPC request
 	 *
