@@ -53,9 +53,7 @@ void *thread_send_lat(void *_info)
 	char *read = memalign(sysconf(_SC_PAGESIZE),4096*2);
 	char *write = memalign(sysconf(_SC_PAGESIZE),4096*2);
         int ret_length;
-	int i,j;
-	struct timespec start, end;
-	double *record=calloc(run_times, sizeof(double));
+	int i,j,cnt;
 	uintptr_t descriptor;
 
 	printf("%s(): receive_message use port %d, send_reply use port %d\n",
@@ -67,14 +65,17 @@ void *thread_send_lat(void *_info)
         mlock(write, 4096);
         mlock(&ret_length, sizeof(int));
 
-	for(j=0;j<7;j++) {
-		memset(read, 0, 4096);
-
-		for(i=0;i<run_times;i++) {
+	for (cnt = 0, j = 0; j < 7; j++) {
+		for (i=0;i<run_times;i++) {
+			*(int *)write = cnt + 200;
 			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
 				info->outbound_port, write, 8, read, &ret_length, 4096);
-			printf("i=%d ret=%d ret_buf=%s\n", i, ret, read);
+
+			printf("cnt=%d send=%d receive=%d\n",\
+				cnt, *(int *)write, *(int *)read);
+			cnt++;
 		}
+		memset(read, 0, 4096);
 	}
 
 	printf("Before do receive\n");
@@ -94,13 +95,11 @@ void *thread_recv(void *_info)
 {
 	struct thread_info *info = _info;
 	uintptr_t descriptor, ret_descriptor;
-	int i,j,k;
+	int i,j,k, cnt;
 	char *read = memalign(sysconf(_SC_PAGESIZE),4096);
 	char *write = memalign(sysconf(_SC_PAGESIZE),4096);
         int ret_length;
-	
         int ret;
-	int recv_num = thread_send_num/thread_recv_num;
 
 	printf("%s(): receive_message use port %d, send_reply use port %d\n",
 		__func__, info->inbound_port, info->outbound_port);
@@ -112,15 +111,19 @@ void *thread_recv(void *_info)
 	memset(write, 'B', 4096);
 	memset(read, 0, 4096);
 
-	for(j=0;j<7;j++) {
-		memset(read, 0, 4096);
+	for(cnt = 0, j=0;j<7;j++) {
                 for (i=0;i<run_times;i++) {
                         ret = userspace_liteapi_receive_message_fast(info->inbound_port,
 				read, 4096, &descriptor, &ret_length, BLOCK_CALL);
 
-			printf("i=%d ret=%d ret_buf=%s\n", i, ret, read);
+			*(int *)write = cnt + 100;
                         userspace_liteapi_reply_message(write, testsize[j], descriptor);
+
+			printf("cnt=%d receive=%d send=%d\n",\
+				cnt, *(int *)read, *(int *)write);
+			cnt++;
                 }
+		memset(read, 0, 4096);
 	}
 
 	printf("beore send_reply\n");
