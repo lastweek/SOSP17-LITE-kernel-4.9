@@ -4772,6 +4772,11 @@ retry_send_imm_request:
 		 * This is the fucking poll flag.
 		 * flag==1, means it is a blocking RPC call
 		 * Otherwise, you can do async RPC.
+		 *
+		 * That means, RPC will return immediately the send is posted.
+		 * which implies, when syscall returned, users are NOT allowed
+		 * to free the buffer, nor reuse it in any form, it maybe corrupted
+		 * before NIC send out.
 		 */
 		if (flag == 1) {
 			client_internal_poll_sendcq(ctx->send_cq[connection_id],

@@ -45,6 +45,15 @@ struct thread_info {
 /*
  * ret_buf is _not_ guranteed to be ready upon return.
  * Caller is responsible for polling *ret_length for completion.
+ *
+ * When the underlying syscall returned, it only guranteed that
+ * the send WQE has been posted to senq queue. It does not gurantee
+ * the buffer has been set out by NIC.
+ *
+ * That means, caller can not free, nor reuse @buf. Otherwise, the
+ * data that will be sent out by NIC, might be corrupted.
+ *
+ * You are safe to reuse @buf after async_rpc_completed() returns true.
  */
 int async_rpc(int dst_nid, int dst_port, void *buf, int buf_size,
 	      void *ret_buf, int *ret_size_ptr, int max_ret_size)
