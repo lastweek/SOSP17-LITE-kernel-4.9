@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2018 Yizhou Shan <ys@purdue.edu>. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -17,6 +26,21 @@
 #include "lite-lib.h"
 
 #define MAX_BUF_SIZE	(1024 * 1024 * 4)
+
+/*
+ * lite rpc max port: 64
+ * each thread pair need 2 ports
+ */
+struct thread_info {
+	/*
+	 * inbound_port is local's property, which is used by local to receive.
+	 * outbound_port is remote's property, which is used by remote to receive
+	 */
+	int inbound_port;
+	int outbound_port;
+
+	int remote_nid;
+};
 
 /*
  * ret_buf is _not_ guranteed to be ready upon return.
@@ -54,21 +78,55 @@ static inline bool async_rpc_completed(int *poll)
 	return true;
 }
 
+#define MAX_OUTSTANDING_RPC	1024
+
 /*
- * lite rpc max port: 64
- * each thread pair need 2 ports
+ * Can we reuse the send buffer? Depends on when the syscall returned.
+ * If it is returned after send has completed, then we can.
+ * If it is returned before send has completed, then we can not.
  */
+void test_async_rpc_send(struct thread_info *info)
+{
+	int *poll_array;
+	int i, ret;
+	char *read, *write;
 
-struct thread_info {
-	/*
-	 * inbound_port is local's property, which is used by local to receive.
-	 * outbound_port is remote's property, which is used by remote to receive
-	 */
-	int inbound_port;
-	int outbound_port;
+	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	poll_array = memalign(sysconf(_SC_PAGESIZE),
+		sizeof(int) * MAX_OUTSTANDING_RPC);
 
-	int remote_nid;
-};
+	for (i = 0; i < 10; i++) {
+		*(int *)write = i + 200;
+		ret = async_rpc(info->remote_nid, info->outbound_port,
+				write, 4, read, &poll_array[i], 4096);
+	}
+
+	for (i = 0; i < 10; i++) {
+		if (async_rpc_completed(&poll_array[i]))
+			printf("async %2d Y\n", i);
+		else
+			printf("async %2d N\n", i);
+	}
+}
+
+void test_async_rpc_recv(struct thread_info *info)
+{
+	int i, ret, ret_length;
+	uintptr_t descriptor;
+	char *read, *write;
+
+	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+
+	for (i = 0; i < 10; i++) {
+		ret = userspace_liteapi_receive_message_fast(info->inbound_port,
+			read, 4096, &descriptor, &ret_length, BLOCK_CALL);
+
+		*(int *)write = i + 200;
+        	userspace_liteapi_reply_message(write, 4, descriptor);
+	}
+}
 
 int testsize[7]={8,8,64,512,1024,2048,4096};
 int run_times = 10;
@@ -78,11 +136,12 @@ void *thread_send_lat(void *_info)
 {
 	struct thread_info *info = _info;
 	int ret;
-	char *read = memalign(sysconf(_SC_PAGESIZE),4096*2);
-	char *write = memalign(sysconf(_SC_PAGESIZE),4096*2);
+	char *read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	char *write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
         int ret_length;
 	int i,j,cnt;
 	uintptr_t descriptor;
+	int *async_poll_buffer;
 
 	printf("%s(): receive_message use port %d, send_reply use port %d\n",
 		__func__, info->inbound_port, info->outbound_port);
@@ -92,6 +151,13 @@ void *thread_send_lat(void *_info)
         mlock(read, 4096);
         mlock(write, 4096);
         mlock(&ret_length, sizeof(int));
+
+	/*
+	 * Part I
+	 * Test Synchronous Symmetric RPC
+	 * - send_reply
+	 * - receive + reply
+	 */
 
 	/* send_reply */
 	for (cnt = 0, j = 0; j < 7; j++) {
@@ -122,6 +188,13 @@ void *thread_send_lat(void *_info)
                 }
 		memset(read, 0, 4096);
 	}
+
+	/*
+	 * Part II
+	 * Test A-synchronous RPC
+	 * - send_reply
+	 */
+	test_async_rpc_send(info);
 }
 
 void *thread_recv(void *_info)
@@ -144,6 +217,13 @@ void *thread_recv(void *_info)
 	memset(write, 'B', 4096);
 	memset(read, 0, 4096);
 
+	/*
+	 * Part I
+	 * Symmetric RPC
+	 * - receive + reply
+	 * - send_reply
+	 */
+
 	/* Receive + Reply */
 	for(cnt = 0, j=0;j<7;j++) {
                 for (i=0;i<run_times;i++) {
@@ -174,6 +254,7 @@ void *thread_recv(void *_info)
 		memset(read, 0, 4096);
 	}
 
+	test_async_rpc_recv(info);
 }
 
 void run(bool server_mode, int remote_node)
@@ -240,28 +321,30 @@ static void usage(const char *argv0)
 {
 	printf("Usage:\n");
 	printf("  %s -s                    start a server and wait for connection\n", argv0);
-	printf("  %s -n <nid>              connect to server at <nid>\n", argv0);
+	printf("  %s -c -n <nid>           start a client and connect to server at <nid>\n", argv0);
 	printf("\n");
 	printf("Options:\n");
+	printf("  -c, --client              start a client\n");
 	printf("  -s, --server              start a server\n");
 	printf("  -n, --remote_nid=<nid>    remote server_id\n");
 }
 
 static struct option long_options[] = {
 	{ .name = "server",	.has_arg = 0, .val = 's' },
+	{ .name = "client",	.has_arg = 0, .val = 'c' },
 	{ .name = "remote_nid",	.has_arg = 1, .val = 'n' },
 	{}
 };
 
 int main(int argc, char *argv[])
 {
-	bool server_mode = false;
+	bool server_mode = false, client_mode = false;
 	unsigned int remote_nid = -1;
 
 	while (1) {
 		int c;
 
-		c = getopt_long(argc, argv, "n:s",
+		c = getopt_long(argc, argv, "n:sc",
 				long_options, NULL);
 
 		if (c == -1)
@@ -270,6 +353,9 @@ int main(int argc, char *argv[])
 		switch (c) {
 		case 's':
 			server_mode = true;
+			break;
+		case 'c':
+			client_mode = true;
 			break;
 		case 'n':
 			remote_nid = strtoul(optarg, NULL, 0);
@@ -284,7 +370,10 @@ int main(int argc, char *argv[])
 		};
 	}
 
-	if (!server_mode && (remote_nid == -1)) {
+	if (!server_mode && !client_mode) {
+		usage(argv[0]);
+		return -1;
+	} else if (client_mode && (remote_nid == -1)) {
 		usage(argv[0]);
 		return -1;
 	} else if (server_mode && (remote_nid != -1)) {
@@ -298,5 +387,6 @@ int main(int argc, char *argv[])
 		printf("RPC client, connect to server at %d\n", remote_nid);
 
 	run(server_mode, remote_nid);
+
 	return 0;
 }
