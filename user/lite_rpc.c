@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -23,6 +24,7 @@
 #include <stdbool.h>
 #include <malloc.h>
 #include <getopt.h>
+#include <sched.h>
 #include "lite-lib.h"
 
 #define MAX_BUF_SIZE	(1024 * 1024 * 4)
@@ -50,6 +52,16 @@ static inline long timespec_diff_ns(struct timespec end, struct timespec start)
 	e = end.tv_sec * NSEC_PER_SEC + end.tv_nsec;
 	s = start.tv_sec * NSEC_PER_SEC + start.tv_nsec;
 	return e - s;
+}
+
+static int bind_thread(int cpu_id)
+{
+	cpu_set_t cpu_set;
+
+	CPU_ZERO(&cpu_set);
+	CPU_SET(cpu_id, &cpu_set);
+
+	return sched_setaffinity(0, sizeof (cpu_set), &cpu_set);
 }
 
 /*
@@ -157,8 +169,8 @@ void test_async_rpc_send(struct thread_info *info)
 	for (i = 0; i < NR_ASYNC_RPC; i++)
 		wait_for_completion(&poll_array[i]);
 
-	printf("Performed #%d async_rpc, average %ld ns\n",
-		NR_ASYNC_RPC, diff_ns/NR_ASYNC_RPC);
+	printf("Performed #%d async_rpc. Total %ld ns, per async_rpc: %ld ns\n",
+		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC);
 
 	printf("Done async rpc\n");
 }
@@ -198,6 +210,8 @@ void *thread_send_lat(void *_info)
 
 	printf("%s(): receive_message use port %d, send_reply use port %d\n",
 		__func__, info->inbound_port, info->outbound_port);
+	bind_thread(55);
+	printf("Start testing on CPU%2d\n", sched_getcpu());
 
 	memset(write, 'A', 4096);
 	memset(read, 0, 4096);
@@ -262,6 +276,8 @@ void *thread_recv(void *_info)
 
 	printf("%s(): receive_message use port %d, send_reply use port %d\n",
 		__func__, info->inbound_port, info->outbound_port);
+	bind_thread(55);
+	printf("Start testing on CPU%2d\n", sched_getcpu());
 
         mlock(write, 4096);
         mlock(read, 4096);
