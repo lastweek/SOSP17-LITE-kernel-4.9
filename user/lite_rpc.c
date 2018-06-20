@@ -132,8 +132,13 @@ static inline void wait_for_completion(int *poll)
 	}
 }
 
-#define NR_ASYNC_RPC		(1000 * 1000 * 10)
-#define NR_SYNC_RPC		(1000 * 1000 * 10)
+/*
+ * @NR_OUTSTANDING_ASYNC_RPC is the maximum outstanding a-sync rpc requests.
+ * Every these number of a-sync request, we need to check poll.
+ */
+static int async_batch_size;
+#define NR_ASYNC_RPC			(1000 * 1000 * 4)
+#define NR_SYNC_RPC			(1000 * 1000 * 4)
 
 void test_sync_rpc_send(struct thread_info *info)
 {
@@ -142,6 +147,7 @@ void test_sync_rpc_send(struct thread_info *info)
 	char *read, *write;
 	struct timespec start, end;
 	long diff_ns;
+	double rps;
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
@@ -166,8 +172,9 @@ void test_sync_rpc_send(struct thread_info *info)
 
 	diff_ns = timespec_diff_ns(end, start);
 
-	printf("Performed #%d sync_rpc. Total %ld ns, per sync_rpc: %ld ns\n",
-		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC);
+	rps = NR_SYNC_RPC / ((diff_ns * 1.0) / NSEC_PER_SEC);
+	printf("Performed #%d sync_rpc. Total %ld ns, per sync_rpc: %ld ns. RPC/s: %lf\n",
+		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
 
 	printf("Done sync rpc\n");
 }
@@ -200,10 +207,11 @@ void test_sync_rpc_recv(struct thread_info *info)
 void test_async_rpc_send(struct thread_info *info)
 {
 	int *poll_array;
-	int i, ret;
+	int i, base, ret;
 	char *read, *write;
 	struct timespec start, end;
 	long diff_ns;
+	double rps;
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
@@ -223,15 +231,24 @@ void test_async_rpc_send(struct thread_info *info)
 		 */
 		async_rpc(info->remote_nid, info->outbound_port,
 			write, 4, read, &poll_array[i], 4096);
+
+		/*
+		 * Perform batch completion check
+		 */
+		if ((i % async_batch_size == 0) && i != 0) {
+			int k;
+
+			base = i - async_batch_size;
+			for (k = 0; k < async_batch_size; k++)
+				wait_for_completion(&poll_array[base + k]);
+		}
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
-
 	diff_ns = timespec_diff_ns(end, start);
-	for (i = 0; i < NR_ASYNC_RPC; i++)
-		wait_for_completion(&poll_array[i]);
 
-	printf("Performed #%d async_rpc. Total %ld ns, per async_rpc: %ld ns\n",
-		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC);
+	rps = NR_ASYNC_RPC / ((diff_ns * 1.0) / NSEC_PER_SEC);
+	printf("Performed #%d async_rpc. Total %ld ns, per async_rpc: %ld ns. RPC/s: %lf\n",
+		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 
 	printf("Done async rpc\n");
 }
