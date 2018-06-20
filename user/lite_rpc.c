@@ -65,28 +65,35 @@ void *thread_send_lat(void *_info)
         mlock(write, 4096);
         mlock(&ret_length, sizeof(int));
 
+	/* send_reply */
 	for (cnt = 0, j = 0; j < 7; j++) {
 		for (i=0;i<run_times;i++) {
 			*(int *)write = cnt + 200;
 			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
 				info->outbound_port, write, 8, read, &ret_length, 4096);
 
-			printf("cnt=%d send=%d receive=%d\n",\
+			printf("send_reply cnt=%d send=%d receive=%d\n",\
 				cnt, *(int *)write, *(int *)read);
 			cnt++;
 		}
 		memset(read, 0, 4096);
 	}
 
-	printf("Before do receive\n");
+	/* Receive + Reply */
+	for(cnt = 0, j=0;j<7;j++) {
+                for (i=0;i<run_times;i++) {
+                        ret = userspace_liteapi_receive_message_fast(info->inbound_port,
+				read, 4096, &descriptor, &ret_length, BLOCK_CALL);
 
-	userspace_liteapi_receive_message_fast(info->inbound_port,
-		read, 4096, &descriptor, &ret_length, BLOCK_CALL);
+			*(int *)write = cnt + 100;
+                        userspace_liteapi_reply_message(write, testsize[j], descriptor);
 
-	printf("ret_buf: %s\n", read);
-	printf("after do receive\n");
-	userspace_liteapi_reply_message(write, 8, descriptor);
-	printf("after do reply\n");
+			printf("receive+reply cnt=%d receive=%d send=%d\n",\
+				cnt, *(int *)read, *(int *)write);
+			cnt++;
+                }
+		memset(read, 0, 4096);
+	}
 
 	return 0;
 }
@@ -111,6 +118,7 @@ void *thread_recv(void *_info)
 	memset(write, 'B', 4096);
 	memset(read, 0, 4096);
 
+	/* Receive + Reply */
 	for(cnt = 0, j=0;j<7;j++) {
                 for (i=0;i<run_times;i++) {
                         ret = userspace_liteapi_receive_message_fast(info->inbound_port,
@@ -119,18 +127,27 @@ void *thread_recv(void *_info)
 			*(int *)write = cnt + 100;
                         userspace_liteapi_reply_message(write, testsize[j], descriptor);
 
-			printf("cnt=%d receive=%d send=%d\n",\
+			printf("receive+reply cnt=%d receive=%d send=%d\n",\
 				cnt, *(int *)read, *(int *)write);
 			cnt++;
                 }
 		memset(read, 0, 4096);
 	}
 
-	printf("beore send_reply\n");
-	userspace_liteapi_send_reply_imm_fast(info->remote_nid, info->outbound_port,
-		write, 8, read, &ret_length, 4096);
-	printf("ret_buf=%s\n", read);
-	printf("after send_reply\n");
+	/* send_reply */
+	for (cnt = 0, j = 0; j < 7; j++) {
+		for (i=0;i<run_times;i++) {
+			*(int *)write = cnt + 200;
+			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
+				info->outbound_port, write, 8, read, &ret_length, 4096);
+
+			printf("send_reply cnt=%d send=%d receive=%d\n",\
+				cnt, *(int *)write, *(int *)read);
+			cnt++;
+		}
+		memset(read, 0, 4096);
+	}
+
 }
 
 void run(bool server_mode, int remote_node)
