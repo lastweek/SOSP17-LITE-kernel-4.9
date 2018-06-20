@@ -132,7 +132,60 @@ static inline void wait_for_completion(int *poll)
 	}
 }
 
-#define NR_ASYNC_RPC		(1000 * 1000 * 10)
+#define NR_ASYNC_RPC		(1000 * 1000 * 1)
+#define NR_SYNC_RPC		(1000 * 1000 * 1)
+
+void test_sync_rpc_send(struct thread_info *info)
+{
+	int *poll_array;
+	int i, ret;
+	char *read, *write;
+	struct timespec start, end;
+	long diff_ns;
+
+	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	poll_array = memalign(sysconf(_SC_PAGESIZE),
+		sizeof(int) * NR_SYNC_RPC);
+	memset(poll_array, 0, sizeof(int) * NR_ASYNC_RPC);
+
+	printf("Start sync rpc\n");
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	for (i = 0; i < NR_SYNC_RPC; i++) {
+		/*
+		 * send 4 bytes 
+		 */
+		userspace_liteapi_send_reply_imm_fast(info->remote_nid,
+			info->outbound_port, write, 4, read, &poll_array[i], 4096);
+	}
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	diff_ns = timespec_diff_ns(end, start);
+
+	printf("Performed #%d sync_rpc. Total %ld ns, per sync_rpc: %ld ns\n",
+		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC);
+
+	printf("Done sync rpc\n");
+}
+
+void test_sync_rpc_recv(struct thread_info *info)
+{
+	int i, ret, ret_length;
+	uintptr_t descriptor;
+	char *read, *write;
+
+	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
+
+	printf("Start sync test\n");
+	for (i = 0; i < NR_SYNC_RPC; i++) {
+		ret = userspace_liteapi_receive_message_fast(info->inbound_port,
+			read, 4096, &descriptor, &ret_length, BLOCK_CALL);
+        	userspace_liteapi_reply_message(write, 4, descriptor);
+	}
+	printf("Done async test\n");
+}
 
 /*
  * Can we reuse the send buffer? Depends on when the syscall returned.
@@ -262,6 +315,7 @@ void *thread_send_lat(void *_info)
 	 * - send_reply
 	 */
 	test_async_rpc_send(info);
+	test_sync_rpc_send(info);
 }
 
 void *thread_recv(void *_info)
@@ -324,6 +378,7 @@ void *thread_recv(void *_info)
 	}
 
 	test_async_rpc_recv(info);
+	test_sync_rpc_recv(info);
 }
 
 void run(bool server_mode, int remote_node)
