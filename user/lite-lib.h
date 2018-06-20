@@ -104,7 +104,7 @@ struct receive_struct{
 #define IMM_MAX_PRIORITY 64
 #define IMM_MAX_PRIORITY_BIT 6
 
-#define SEND_REPLY_WAIT -101
+#define SEND_REPLY_WAIT (-101)
 
 #define CHECK_LENGTH 100000
 

@@ -104,6 +104,11 @@ void test_async_rpc_send(struct thread_info *info)
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	poll_array = memalign(sysconf(_SC_PAGESIZE),
 		sizeof(int) * MAX_OUTSTANDING_RPC);
+	memset(poll_array, 0, sizeof(int) * MAX_OUTSTANDING_RPC);
+
+	for (i = 0; i < 10; i++) {
+		printf("async %2d\n", poll_array[i]);
+	}
 
 	for (i = 0; i < 10; i++) {
 		*(int *)write = i + 200;
@@ -112,10 +117,7 @@ void test_async_rpc_send(struct thread_info *info)
 	}
 
 	for (i = 0; i < 10; i++) {
-		if (async_rpc_completed(&poll_array[i]))
-			printf("async %2d Y\n", i);
-		else
-			printf("async %2d N\n", i);
+		printf("async %2d\n", poll_array[i]);
 	}
 }
 
@@ -134,6 +136,8 @@ void test_async_rpc_recv(struct thread_info *info)
 
 		*(int *)write = i + 200;
         	userspace_liteapi_reply_message(write, 4, descriptor);
+		printf("%s(): read: %d write: %d\n", __func__,
+			*(int *)read, *(int *)write);
 	}
 }
 
