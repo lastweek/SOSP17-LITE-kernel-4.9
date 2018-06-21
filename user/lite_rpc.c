@@ -240,8 +240,6 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
 	printf("\033[31m Performed #%d async_rpc (batch_size: %d). Total %ld ns, per-RPC: %ld ns. RPC/s: %lf\033[0m\n",
 		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
-
-	printf("Done async rpc\n");
 }
 
 void test_async_rpc_recv(struct thread_info *info, int NR_ASYNC_RPC)
@@ -335,6 +333,12 @@ void *thread_send_lat(void *_info)
 
 		nr_rpc = 500 * 1000 * (i + 1);
 		test_async_rpc_send(info, nr_rpc);
+	}
+
+	for (i = 0; i < 3; i++) {
+		int nr_rpc;
+
+		nr_rpc = 500 * 1000 * (i + 1);
 		test_sync_rpc_send(info, nr_rpc);
 	}
 }
@@ -403,6 +407,11 @@ void *thread_recv(void *_info)
 
 		nr_rpc = 500 * 1000 * (i + 1);
 		test_async_rpc_recv(info, nr_rpc);
+	}
+	for (i = 0; i < 3; i++) {
+		int nr_rpc;
+
+		nr_rpc = 500 * 1000 * (i + 1);
 		test_sync_rpc_recv(info, nr_rpc);
 	}
 }
