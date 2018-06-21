@@ -45,9 +45,9 @@ struct thread_info {
 };
 
 #define NSEC_PER_SEC	(1000*1000*1000)
-static inline double timespec_diff_ns(struct timespec end, struct timespec start)
+static inline long timespec_diff_ns(struct timespec end, struct timespec start)
 {
-	double e, s;
+	long e, s;
 
 	e = end.tv_sec * NSEC_PER_SEC + end.tv_nsec;
 	s = start.tv_sec * NSEC_PER_SEC + start.tv_nsec;
@@ -136,7 +136,7 @@ static inline void wait_for_completion(int *poll)
  * @NR_OUTSTANDING_ASYNC_RPC is the maximum outstanding a-sync rpc requests.
  * Every these number of a-sync request, we need to check poll.
  */
-static int async_batch_size;
+static int async_batch_size = 32;
 #define NR_ASYNC_RPC			(1000 * 1000 * 4)
 #define NR_SYNC_RPC			(1000 * 1000 * 4)
 
@@ -146,7 +146,8 @@ void test_sync_rpc_send(struct thread_info *info)
 	int i, ret;
 	char *read, *write;
 	struct timespec start, end;
-	double diff_s, diff_ns, rps;
+	long diff_ns;
+	double rps;
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
@@ -170,11 +171,9 @@ void test_sync_rpc_send(struct thread_info *info)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	diff_ns = timespec_diff_ns(end, start);
-	diff_s = diff_ns / (double)NSEC_PER_SEC;
-	printf("  time elapsed: %lf s\n", diff_s);
-	rps = (double)NR_ASYNC_RPC / diff_s;
 
-	printf("Performed #%d sync_rpc. Total %lf ns, per sync_rpc: %lf ns. RPC/s: %lf\n",
+	rps = (double)NR_SYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
+	printf("\033[31m Performed #%d sync_rpc. Total %ld ns, per sync_rpc: %ld ns. RPC/s: %lf\033[0m\n",
 		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
 
 	printf("Done sync rpc\n");
@@ -211,7 +210,8 @@ void test_async_rpc_send(struct thread_info *info)
 	int i, base, ret;
 	char *read, *write;
 	struct timespec start, end;
-	double rps, diff_ns, diff_s;
+	long diff_ns;
+	double rps;
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
@@ -222,7 +222,7 @@ void test_async_rpc_send(struct thread_info *info)
 	mlock(write, 4096);
 	mlock(poll_array, sizeof(int) * NR_ASYNC_RPC);
 
-	printf("Start async rpc\n");
+	printf("Start async rpc. async_batch_size: %d\n", async_batch_size);
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
@@ -246,11 +246,9 @@ void test_async_rpc_send(struct thread_info *info)
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
 	diff_ns = timespec_diff_ns(end, start);
-	diff_s = diff_ns / (double)NSEC_PER_SEC;
-	printf("  time elapsed: %lf s\n", diff_s);
-	rps = (double)NR_ASYNC_RPC / diff_s;
 
-	printf("Performed #%d async_rpc. Total %lf ns, per async_rpc: %lf ns. RPC/s: %lf\n",
+	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
+	printf("\033[31m Performed #%d async_rpc. Total %ld ns, per async_rpc: %ld ns. RPC/s: %lf\033[0m\n",
 		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 
 	printf("Done async rpc\n");
@@ -316,8 +314,8 @@ void *thread_send_lat(void *_info)
 			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
 				info->outbound_port, write, 8, read, &ret_length, 4096);
 
-			printf("send_reply cnt=%d send=%d receive=%d\n",\
-				cnt, *(int *)write, *(int *)read);
+			//printf("send_reply cnt=%d send=%d receive=%d\n",\
+			//	cnt, *(int *)write, *(int *)read);
 			cnt++;
 		}
 		memset(read, 0, 4096);
@@ -332,8 +330,8 @@ void *thread_send_lat(void *_info)
 			*(int *)write = cnt + 100;
                         userspace_liteapi_reply_message(write, testsize[j], descriptor);
 
-			printf("receive+reply cnt=%d receive=%d send=%d\n",\
-				cnt, *(int *)read, *(int *)write);
+			//printf("receive+reply cnt=%d receive=%d send=%d\n",\
+			//	cnt, *(int *)read, *(int *)write);
 			cnt++;
                 }
 		memset(read, 0, 4096);
@@ -386,8 +384,8 @@ void *thread_recv(void *_info)
 			*(int *)write = cnt + 100;
                         userspace_liteapi_reply_message(write, testsize[j], descriptor);
 
-			printf("receive+reply cnt=%d receive=%d send=%d\n",\
-				cnt, *(int *)read, *(int *)write);
+			//printf("receive+reply cnt=%d receive=%d send=%d\n",\
+			//	cnt, *(int *)read, *(int *)write);
 			cnt++;
                 }
 		memset(read, 0, 4096);
@@ -400,8 +398,8 @@ void *thread_recv(void *_info)
 			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
 				info->outbound_port, write, 8, read, &ret_length, 4096);
 
-			printf("send_reply cnt=%d send=%d receive=%d\n",\
-				cnt, *(int *)write, *(int *)read);
+			//printf("send_reply cnt=%d send=%d receive=%d\n",\
+			//	cnt, *(int *)write, *(int *)read);
 			cnt++;
 		}
 		memset(read, 0, 4096);
