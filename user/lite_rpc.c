@@ -169,7 +169,7 @@ void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 	diff_ns = timespec_diff_ns(end, start);
 
 	rps = (double)NR_SYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
-	printf("\033[31m Performed #%d sync_rpc. Total %ld ns, per RPC: %ld ns. RPC/s: %lf\033[0m\n",
+	printf("\033[31m Performed #%10d sync_rpc. Total %13ld ns, per RPC: %ld ns. RPC/s: %10lf\033[0m\n",
 		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
 }
 
@@ -238,7 +238,7 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	diff_ns = timespec_diff_ns(end, start);
 
 	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
-	printf("\033[31m Performed #%d async_rpc (batch_size: %d). Total %ld ns, per-RPC: %ld ns. RPC/s: %lf\033[0m\n",
+	printf("\033[31m Performed #%10d async_rpc (batch_size: %d). Total %13ld ns, per-RPC: %ld ns. RPC/s: %10lf\033[0m\n",
 		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 }
 
@@ -328,14 +328,14 @@ void *thread_send_lat(void *_info)
 	 * Test A-synchronous RPC
 	 * - send_reply
 	 */
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
 		nr_rpc = 500 * 1000 * (i + 1);
 		test_async_rpc_send(info, nr_rpc);
 	}
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
 		nr_rpc = 500 * 1000 * (i + 1);
@@ -402,13 +402,13 @@ void *thread_recv(void *_info)
 		memset(read, 0, 4096);
 	}
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
 		nr_rpc = 500 * 1000 * (i + 1);
 		test_async_rpc_recv(info, nr_rpc);
 	}
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
 		nr_rpc = 500 * 1000 * (i + 1);
