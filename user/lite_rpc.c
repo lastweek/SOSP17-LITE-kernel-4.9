@@ -149,12 +149,12 @@ void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
-	poll_array = memalign(sysconf(_SC_PAGESIZE),
-		sizeof(int) * NR_SYNC_RPC);
-	memset(poll_array, 0, sizeof(int) * NR_SYNC_RPC);
+	poll_array = memalign(sysconf(_SC_PAGESIZE), sizeof(int));
+	memset(poll_array, 0, sizeof(int));
+
 	mlock(read, 4096);
 	mlock(write, 4096);
-	mlock(poll_array, sizeof(int) * NR_SYNC_RPC);
+	mlock(poll_array, sizeof(int));
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NR_SYNC_RPC; i++) {
@@ -162,7 +162,7 @@ void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 		 * send 4 bytes 
 		 */
 		userspace_liteapi_send_reply_imm_fast(info->remote_nid,
-			info->outbound_port, write, 4, read, &poll_array[i], 4096);
+			info->outbound_port, write, 4, read, poll_array, 4096);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -208,8 +208,8 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	poll_array = memalign(sysconf(_SC_PAGESIZE),
-		sizeof(int) * NR_ASYNC_RPC);
-	memset(poll_array, 0, sizeof(int) * NR_ASYNC_RPC);
+		sizeof(int) * async_batch_size);
+	memset(poll_array, 0, sizeof(int) * async_batch_size);
 	mlock(read, 4096);
 	mlock(write, 4096);
 	mlock(poll_array, sizeof(int) * NR_ASYNC_RPC);
@@ -218,9 +218,10 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
 		/*
 		 * send 4 bytes 
+		 * And only use [0, async_batch_size) portion of poll array.
 		 */
 		async_rpc(info->remote_nid, info->outbound_port,
-			write, 4, read, &poll_array[i], 4096);
+			write, 4, read, &poll_array[i % async_batch_size], 4096);
 
 		/*
 		 * Perform batch completion check
@@ -230,7 +231,7 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 
 			base = i - async_batch_size;
 			for (k = 0; k < async_batch_size; k++)
-				wait_for_completion(&poll_array[base + k]);
+				wait_for_completion(&poll_array[(base + k) & async_batch_size]);
 		}
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
