@@ -137,10 +137,8 @@ static inline void wait_for_completion(int *poll)
  * Every these number of a-sync request, we need to check poll.
  */
 static int async_batch_size = 32;
-#define NR_ASYNC_RPC			(1000 * 1000 * 4)
-#define NR_SYNC_RPC			(1000 * 1000 * 4)
 
-void test_sync_rpc_send(struct thread_info *info)
+void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 {
 	int *poll_array;
 	int i, ret;
@@ -158,8 +156,6 @@ void test_sync_rpc_send(struct thread_info *info)
 	mlock(write, 4096);
 	mlock(poll_array, sizeof(int) * NR_SYNC_RPC);
 
-	printf("Start sync rpc\n");
-
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NR_SYNC_RPC; i++) {
 		/*
@@ -173,13 +169,11 @@ void test_sync_rpc_send(struct thread_info *info)
 	diff_ns = timespec_diff_ns(end, start);
 
 	rps = (double)NR_SYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
-	printf("\033[31m Performed #%d sync_rpc. Total %ld ns, per sync_rpc: %ld ns. RPC/s: %lf\033[0m\n",
+	printf("\033[31m Performed #%d sync_rpc. Total %ld ns, per RPC: %ld ns. RPC/s: %lf\033[0m\n",
 		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
-
-	printf("Done sync rpc\n");
 }
 
-void test_sync_rpc_recv(struct thread_info *info)
+void test_sync_rpc_recv(struct thread_info *info, int NR_SYNC_RPC)
 {
 	int i, ret, ret_length;
 	uintptr_t descriptor;
@@ -190,13 +184,11 @@ void test_sync_rpc_recv(struct thread_info *info)
 	mlock(read, 4096);
 	mlock(write, 4096);
 
-	printf("Start sync test\n");
 	for (i = 0; i < NR_SYNC_RPC; i++) {
 		ret = userspace_liteapi_receive_message_fast(info->inbound_port,
 			read, 4096, &descriptor, &ret_length, BLOCK_CALL);
         	userspace_liteapi_reply_message(write, 4, descriptor);
 	}
-	printf("Done async test\n");
 }
 
 /*
@@ -204,7 +196,7 @@ void test_sync_rpc_recv(struct thread_info *info)
  * If it is returned after send has completed, then we can.
  * If it is returned before send has completed, then we can not.
  */
-void test_async_rpc_send(struct thread_info *info)
+void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 {
 	int *poll_array;
 	int i, base, ret;
@@ -221,8 +213,6 @@ void test_async_rpc_send(struct thread_info *info)
 	mlock(read, 4096);
 	mlock(write, 4096);
 	mlock(poll_array, sizeof(int) * NR_ASYNC_RPC);
-
-	printf("Start async rpc. async_batch_size: %d\n", async_batch_size);
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
@@ -248,13 +238,13 @@ void test_async_rpc_send(struct thread_info *info)
 	diff_ns = timespec_diff_ns(end, start);
 
 	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
-	printf("\033[31m Performed #%d async_rpc. Total %ld ns, per async_rpc: %ld ns. RPC/s: %lf\033[0m\n",
-		NR_ASYNC_RPC, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
+	printf("\033[31m Performed #%d async_rpc (batch_size: %d). Total %ld ns, per-RPC: %ld ns. RPC/s: %lf\033[0m\n",
+		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 
 	printf("Done async rpc\n");
 }
 
-void test_async_rpc_recv(struct thread_info *info)
+void test_async_rpc_recv(struct thread_info *info, int NR_ASYNC_RPC)
 {
 	int i, ret, ret_length;
 	uintptr_t descriptor;
@@ -265,13 +255,11 @@ void test_async_rpc_recv(struct thread_info *info)
 	mlock(read, 4096);
 	mlock(write, 4096);
 
-	printf("Start async test\n");
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
 		ret = userspace_liteapi_receive_message_fast(info->inbound_port,
 			read, 4096, &descriptor, &ret_length, BLOCK_CALL);
         	userspace_liteapi_reply_message(write, 4, descriptor);
 	}
-	printf("Done async test\n");
 }
 
 int testsize[7]={8,8,64,512,1024,2048,4096};
@@ -342,8 +330,13 @@ void *thread_send_lat(void *_info)
 	 * Test A-synchronous RPC
 	 * - send_reply
 	 */
-	test_async_rpc_send(info);
-	test_sync_rpc_send(info);
+	for (i = 0; i < 3; i++) {
+		int nr_rpc;
+
+		nr_rpc = 500 * 1000 * (i + 1);
+		test_async_rpc_send(info, nr_rpc);
+		test_sync_rpc_send(info, nr_rpc);
+	}
 }
 
 void *thread_recv(void *_info)
@@ -405,8 +398,13 @@ void *thread_recv(void *_info)
 		memset(read, 0, 4096);
 	}
 
-	test_async_rpc_recv(info);
-	test_sync_rpc_recv(info);
+	for (i = 0; i < 3; i++) {
+		int nr_rpc;
+
+		nr_rpc = 500 * 1000 * (i + 1);
+		test_async_rpc_recv(info, nr_rpc);
+		test_sync_rpc_recv(info, nr_rpc);
+	}
 }
 
 void run(bool server_mode, int remote_node)

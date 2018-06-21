@@ -4701,13 +4701,9 @@ retry_send_imm_request:
 			 * Do not block here. Assume user-level async library will
 			 * do the batch checking for each pthread (N coroutines.)
 			 */
-#if 0
                         if (read_num % (RECV_DEPTH / 4) == 0 || force_poll_flag) {
-#else
-			if (force_poll_flag) {
-#endif
-				//pr_info("%s(): connection_id: %3d read_num: %5d, RECV_DEPTH: %d force=%d\n",
-				//	__func__, connection_id, read_num, RECV_DEPTH, force_poll_flag);
+				pr_info("%s(): connection_id: %3d read_num: %5d, RECV_DEPTH: %d force=%d\n",
+					__func__, connection_id, read_num, RECV_DEPTH, force_poll_flag);
                                 wr->wr_id = (uint64_t)&poll_status;
                                 wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
