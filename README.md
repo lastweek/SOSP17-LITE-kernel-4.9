@@ -52,3 +52,13 @@ Oh yes, one can switch between OFED kernel and non-OFED kernel. OFED kernel modu
 * Download `rdma-core` and compile.
 * `export LD_PRELOAD="~/rdma-core/build/lib/libibverbs.so.1.1.19.0"` (replace the directory and version number)
 * `ibv_devinfo ...`
+
+
+## Personal note on LITE
+There are 4 (NUM_PARALLEL_CONNECTION) QP connections between each pair of node. That means all applications on node A will use share these 4 QPs to talk with node B, node A use another 4 QPs to talk with node C, and so on.
+
+Each QP has its own `send_cq`, while all QPs in a node share the same `recv_cq`, which is `ctx->cq`. I think it is because it only has 1 polling thread that will poll the receive cq.
+
+Function `client_get_connection_by_atomic_number` determins which QP is used when node A wants to talk with B. Default is round-robin (poor locality).
+
+I spent so much time to find out this minor fact.

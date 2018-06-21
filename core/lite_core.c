@@ -1111,7 +1111,7 @@ int client_post_receives_message(ltc *ctx, int connection_id, int depth)
 EXPORT_SYMBOL(client_post_receives_message);
 
 /**
- * client_post_receives_message: post message buffer for UD connections
+ * client_post_receives_message_UD: post message buffer for UD connections
  * @ctx: lite context
  * @depth: how many message should be post received
  */
@@ -4457,7 +4457,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 				LITE_USERSPACE_FLAG, 0, NULL, 0);
 
 			/*
-			 * Okay, HACK!!
+			 * HACK! A-sync RPC
 			 *
 			 * Here is the case you want to have the fast RPC, where userspace poll the
 			 * ctx->imm_store_block_queue[store_id], which has been replaced above!
@@ -4694,7 +4694,20 @@ retry_send_imm_request:
 			 * This is where RPC will walk into..
 			 */
                         read_num = atomic_inc_return(&ctx->connection_count[connection_id]);
-                        if (read_num%(RECV_DEPTH/4)==0 || force_poll_flag) {
+
+			/*
+			 * XXX:
+			 *
+			 * Do not block here. Assume user-level async library will
+			 * do the batch checking for each pthread (N coroutines.)
+			 */
+#if 0
+                        if (read_num % (RECV_DEPTH / 4) == 0 || force_poll_flag) {
+#else
+			if (force_poll_flag) {
+#endif
+				//pr_info("%s(): connection_id: %3d read_num: %5d, RECV_DEPTH: %d force=%d\n",
+				//	__func__, connection_id, read_num, RECV_DEPTH, force_poll_flag);
                                 wr->wr_id = (uint64_t)&poll_status;
                                 wr->send_flags = IB_SEND_SIGNALED;
                                 flag = 1;
