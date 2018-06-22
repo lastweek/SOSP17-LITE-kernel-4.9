@@ -155,14 +155,33 @@ static inline void lite_dp(const char *fmt, ...)
 
 #define CIRCULAR_BUFFER_LENGTH 256
 
-#define MAX_NODE 32
+#define MAX_NODE 4
 #define MAX_NODE_BIT 5
 
 #define LISTEN_PORT 18500
 
+/*
+ * NUM_PARALLEL_CONNECTION stands for number of connections between a pair of
+ * physical machines. And these connections are shared by all application threads.
+ *
+ * Now, we want to further divive NUM_PARALLEL_CONNECTION into smaller bundles.
+ * Each bundle has @NR_CONNECTIONS_PER_BUNDLE connections, while each pair of
+ * machine has @NR_BUNDLE_PER_PAIR bundles.
+ *
+ * Why?
+ * The selection of connection used to be RR. Now we want to emulate pairs by
+ * using only 1 pair. Our solution: 1) Each bundle stands for a virtual pair,
+ * 2) within each virtual pair, connections are selected by RR policy.
+ *
+ * We embed our impl into `client_get_connection_by_atomic_number()`, which is
+ * the function used to select QP connection.
+ */
+#define NR_CONNECTIONS_PER_BUNDLE	(2)
+#define NR_BUNDLE_PER_PAIR		(2)
+#define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
+
 #define RECV_DEPTH 256
 #define CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH 8
-#define NUM_PARALLEL_CONNECTION 4
 #define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8)/NUM_PARALLEL_CONNECTION
 #define GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(id) (id&0x000000ff)
 
@@ -714,7 +733,6 @@ struct lite_context {
 
 	int *recv_num;
 	atomic_t *atomic_request_num;
-        //unsigned long     *atomic_request_num;
 	atomic_t *atomic_request_num_high;
 	atomic_t parallel_thread_num;
 

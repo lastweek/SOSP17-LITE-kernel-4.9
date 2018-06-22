@@ -501,7 +501,7 @@ int client_setup_loopback_connections(ltc *ctx, int size, int rx_depth, int port
  */
 ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 {
-	int i;
+	int i, j;
 	int num_connections = MAX_CONNECTION;
 	ltc *ctx;
 	struct ib_cq_init_attr cq_attr_foo;
@@ -578,9 +578,16 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 
 	ctx->recv_num = kzalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 
-	ctx->atomic_request_num = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
-	for(i=0;i<ctx->num_node;i++)
-		atomic_set(&ctx->atomic_request_num[i], -1);
+	ctx->atomic_request_num = kmalloc(ctx->num_node * NR_BUNDLE_PER_PAIR * sizeof(atomic_t), GFP_KERNEL);
+	for (i = 0; i < ctx->num_node; i++) {
+		for (j = 0; j < NR_BUNDLE_PER_PAIR; j++) {
+			atomic_t *p;
+
+			p = ctx->atomic_request_num + i * NR_BUNDLE_PER_PAIR + j;
+			pr_crit(" i = %d j = %d %p\n", i, j, p);
+			atomic_set(p, -1);
+		}
+	}
 
 	ctx->atomic_request_num_high = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<ctx->num_node;i++)
@@ -3728,17 +3735,37 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 	if(priority == USERSPACE_LOW_PRIORITY)
 		return NUM_PARALLEL_CONNECTION * target_node;
 	else
-		return atomic_inc_return(&ctx->atomic_request_num[target_node])%(NUM_PARALLEL_CONNECTION-1) + NUM_PARALLEL_CONNECTION * target_node + 1;
+		return atomic_inc_return(&ctx->atomic_request_num[target_node])%(NUM_PARALLEL_CONNECTION-1)
+			+ NUM_PARALLEL_CONNECTION * target_node + 1;
 #endif
+
+	int bundle_id, base_id;
+	int nr_reqs;
+	atomic_t *p;
+
 	/*
-	 * XXX:
-	 * To me, this RR approach lost a lot locality.
-	 * and after all, what is point of doing QP RR selection?
-	 *
-	 *	- ys
+	 * Get a random bundle ID, this can be used to emulate
+	 * random pair connection behavior. Or, you can also use
+	 * zipfan distribution here, which might be more realistic.
 	 */
+	bundle_id = get_random_int() % NR_BUNDLE_PER_PAIR;
+
+	base_id = target_node * NUM_PARALLEL_CONNECTION;
+	base_id += bundle_id * NR_CONNECTIONS_PER_BUNDLE;
+
+	p = ctx->atomic_request_num + target_node * NR_BUNDLE_PER_PAIR + bundle_id;
+	nr_reqs = atomic_inc_return(p);
+
+	base_id += nr_reqs % NR_CONNECTIONS_PER_BUNDLE;
+
+	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d offset_within_bundle: %2d\n",
+		target_node, bundle_id, base_id, nr_reqs % NR_CONNECTIONS_PER_BUNDLE);
+	return base_id;
+
+#if 0
 	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
 		NUM_PARALLEL_CONNECTION * target_node;
+#endif
 }
 EXPORT_SYMBOL(client_get_connection_by_atomic_number);
 
