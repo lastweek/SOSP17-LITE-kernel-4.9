@@ -1947,15 +1947,18 @@ int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_
 	uintptr_t tempaddr;
 	int priority = LOW_PRIORITY;
 	int wait_send_reply_id;
-	struct ask_mr_reply_form reply_mr_form;
-
-
 	struct app_reg_port *entry;
+	struct ask_mr_reply_form *reply_mr_form;
+
 	int bucket;
 	uint64_t port_node_key;
 	//check first
 	struct app_reg_port *current_hash_ptr;
 	int found=0;
+
+	reply_mr_form = kzalloc(sizeof(*reply_mr_form), GFP_KERNEL);
+	WARN_ON(!reply_mr_form);
+
 	if(!requery_flag)//If requery is true, skip local check
 	{
 		port_node_key = (designed_port<<MAX_NODE_BIT) + target_node;
@@ -1986,10 +1989,10 @@ int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_
 	input_mr_form.designed_port = designed_port;
 	wait_send_reply_id = SEND_REPLY_WAIT;
 	tempaddr = client_ib_reg_mr_addr(ctx, &input_mr_form, sizeof(struct ask_mr_form));
-	client_send_message_sge_UD(ctx, target_node, MSG_QUERY_PORT_1, (void *)tempaddr, sizeof(struct ask_mr_form), (uint64_t)&reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
+	client_send_message_sge_UD(ctx, target_node, MSG_QUERY_PORT_1, (void *)tempaddr, sizeof(struct ask_mr_form), (uint64_t)reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		cpu_relax();
-	if(reply_mr_form.op_code == MR_ASK_SUCCESS)
+	if(reply_mr_form->op_code == MR_ASK_SUCCESS)
 	{
 		port_node_key = (designed_port<<MAX_NODE_BIT) + target_node;
 		//printk(KERN_CRIT "%s: using key as %d\n", __func__, port_node_key);
@@ -2000,7 +2003,7 @@ int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_
 		entry->port_node_key = port_node_key;
 		entry->node = target_node;
 		entry->port = designed_port;
-		memcpy(&entry->ring_mr, &reply_mr_form.reply_mr, sizeof(struct lmr_info));
+		memcpy(&entry->ring_mr, &reply_mr_form->reply_mr, sizeof(struct lmr_info));
 		entry->remote_imm_ring_index = 0;
 		spin_lock_init(&entry->remote_imm_offset_lock);
 
@@ -2009,10 +2012,10 @@ int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_
 		spin_unlock(&(REMOTE_MEMORYRING_PORT_HASHTABLE_LOCK[bucket]));
 
 		printk(KERN_CRIT "%s: SUCCESS node %d port %d remote addr %p remote rkey %d remote id %d\n", __func__, target_node, designed_port, entry->ring_mr.addr, entry->ring_mr.rkey, entry->ring_mr.node_id);
-		return reply_mr_form.op_code;
+		return reply_mr_form->op_code;
 	}
-	printk(KERN_CRIT "FAIL %x\n", (int)reply_mr_form.op_code);
-	return reply_mr_form.op_code;
+	printk(KERN_CRIT "FAIL %x\n", (int)reply_mr_form->op_code);
+	return reply_mr_form->op_code;
 }
 EXPORT_SYMBOL(client_query_port);
 
@@ -2194,12 +2197,14 @@ int waiting_queue_handler(ltc *ctx)
 					uintptr_t tempaddr;
 					struct hash_asyio_key *temp_ptr;
 					struct ask_mr_form *input_form;
-					struct ask_mr_reply_form ret;
+					struct ask_mr_reply_form *ret;
 					int found = 0;
 					int answer_from_handler;
 					int bucket;
 					int i;
-					memset(&ret, 0, sizeof(struct ask_mr_reply_form));
+
+					ret = kzalloc(sizeof(*ret), GFP_KERNEL);
+
 					input_form = (struct ask_mr_form *)new_request->msg;
 					#ifdef ASK_MR_TABLE_HANDLING
 						answer_from_handler = client_check_askmr_table(ctx, input_form, new_request->src_id, &litekey_addr, &permission);
@@ -2223,52 +2228,52 @@ int waiting_queue_handler(ltc *ctx)
 						rcu_read_unlock();
 						if(found == 0)
 						{
-							ret.op_code = MR_ASK_HANDLER_ERROR;
+							ret->op_code = MR_ASK_HANDLER_ERROR;
 						}
 						else
 						{
 							if(temp_ptr->permission & MR_SHARE_FLAG)//can share
 							{
 								if(input_form->permission & temp_ptr->permission & permission & MR_READ_FLAG) //READ is okay
-									ret.permission |= MR_READ_FLAG;
+									ret->permission |= MR_READ_FLAG;
 								if(input_form->permission & temp_ptr->permission & permission & MR_WRITE_FLAG) //READ is okay
-									ret.permission |= MR_WRITE_FLAG;
+									ret->permission |= MR_WRITE_FLAG;
 								if(input_form->permission & temp_ptr->permission & permission & MR_SHARE_FLAG) //READ is okay
-									ret.permission |= MR_SHARE_FLAG;
+									ret->permission |= MR_SHARE_FLAG;
 								if(input_form->permission & temp_ptr->permission & permission & MR_ATOMIC_FLAG) //READ is okay
-									ret.permission |= MR_ATOMIC_FLAG;
+									ret->permission |= MR_ATOMIC_FLAG;
 								for(i=0;i<temp_ptr->list_length;i++)
 								{
-									memcpy(&ret.reply_mr[i], temp_ptr->datalist[i], sizeof(struct lmr_info));
+									memcpy(&ret->reply_mr[i], temp_ptr->datalist[i], sizeof(struct lmr_info));
 								}
-								ret.op_code = MR_ASK_SUCCESS;
-								ret.node_id = temp_ptr->node_id;
-								ret.list_length = temp_ptr->list_length;
-								ret.total_length = temp_ptr->size;
+								ret->op_code = MR_ASK_SUCCESS;
+								ret->node_id = temp_ptr->node_id;
+								ret->list_length = temp_ptr->list_length;
+								ret->total_length = temp_ptr->size;
 
 								set_bit(new_request->src_id, temp_ptr->askmr_bitmap);//which would be used to do deregiter in the future
 							}
 							else//return fail
 							{
-								ret.op_code = MR_ASK_UNPERMITTED;
+								ret->op_code = MR_ASK_UNPERMITTED;
 							}
 						}
 					}
 					else//return fail
 					{
-						ret.op_code = MR_ASK_REFUSE;
+						ret->op_code = MR_ASK_REFUSE;
 					}
 
 
 					if(!local_flag)
 					{
-						tempaddr = client_ib_reg_mr_addr(ctx, &ret, sizeof(struct ask_mr_reply_form));
+						tempaddr = client_ib_reg_mr_addr(ctx, ret, sizeof(struct ask_mr_reply_form));
 						client_send_message_sge_UD(ctx, new_request->src_id, MSG_ASK_MR_2, (void *)tempaddr, sizeof(struct ask_mr_reply_form), new_request->store_addr, new_request->store_semaphore, ret_priority);
 						client_free_recv_buf(new_request->msg);
 					}
 					else
 					{
-						client_send_message_local_reply(ctx, new_request->src_id, MSG_ASK_MR_2, (&ret), sizeof(struct ask_mr_reply_form), new_request->store_addr, new_request->store_semaphore, ret_priority);
+						client_send_message_local_reply(ctx, new_request->src_id, MSG_ASK_MR_2, (ret), sizeof(struct ask_mr_reply_form), new_request->store_addr, new_request->store_semaphore, ret_priority);
 					}
 				}
 				break;
@@ -3167,7 +3172,7 @@ int client_poll_cq_pass(struct thread_pass_struct *input)
 int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 {
 	int ne;
-	struct ib_wc wc[NUM_POLLING_WC];
+	struct ib_wc *wc;
 	int i, connection_id;
         int temp_tar;
         struct imm_header_from_cq_to_port *tmp;
@@ -3175,6 +3180,9 @@ int client_poll_cq(ltc *ctx, struct ib_cq *target_cq)
 #ifdef NOTIFY_MODEL
 	int test_result=0;
 #endif
+
+	wc = kzalloc(sizeof(*wc) * NUM_POLLING_WC, GFP_KERNEL);
+	WARN_ON(!wc);
 
 	allow_signal(SIGKILL);
         for(i=0;i<NUM_POLLING_THREADS;i++)
