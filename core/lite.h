@@ -174,7 +174,7 @@ static inline void lite_dp(const char *fmt, ...)
  * the function used to select QP connection.
  */
 #define NR_CONNECTIONS_PER_BUNDLE	(4)
-#define NR_BUNDLE_PER_PAIR		(4)
+#define NR_BUNDLE_PER_PAIR		(8)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
 #define MAX_NODE			(4)
