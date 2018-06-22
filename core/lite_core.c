@@ -6098,8 +6098,12 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	printk(KERN_ALERT "Receive NR_MR_SET %d\n", ask_number_of_MR_set);
 
 	if (ask_number_of_MR_set < 1 || ask_number_of_MR_set > MAX_CONNECTION) {
-		printk(KERN_ALERT "ask too many required MR set from server %d\n",
-			ask_number_of_MR_set);
+		pr_crit("\n"
+			"****\n"
+			"**** WARNING\n"
+			"**** Adjust MAX_CONNECTIONs at both side\n"
+			"**** Local: %d, ask_number_of_MR_set: %d\n"
+			"****\n", MAX_CONNECTION, ask_number_of_MR_set);
 		return 0;
 	}
 

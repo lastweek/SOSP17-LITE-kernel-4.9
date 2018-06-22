@@ -51,8 +51,13 @@ struct atomic_struct{
 	#define SGID_INDEX -1
 #endif
 
-#define MAX_NODE 16
-#define FIRST_ASK_MR_SET 16
+#define NR_CONNECTIONS_PER_BUNDLE	(2)
+#define NR_BUNDLE_PER_PAIR		(2)
+#define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
+
+#define MAX_NODE			(4)
+#define MAX_CONNECTION			(MAX_NODE * NUM_PARALLEL_CONNECTION)
+
 #define LID_SEND_RECV_FORMAT "0000:0000:000000:000000:00000000000000000000000000000000"
 #define LISTEN_BACKLOG 10
 #define LISTEN_PORT 18500
@@ -62,9 +67,7 @@ struct atomic_struct{
 #define MESSAGE_SIZE 4096
 #define MAX_LOCK 1024
 
-#define NUM_PARALLEL_CONNECTION 4
 #define MAX_ATOMIC_SEND_NUM 4096
-#define MAX_CONNECTION MAX_NODE*NUM_PARALLEL_CONNECTION
 #define MAX_PARALLEL_THREAD 32 //Assume that MAX_NODE * NUM_PARALLEL_CONNECT is smaller than 256
 #define WRAP_UP_NUM_FOR_WRID 256 //since there are 64 bits in wr_id, we are going to use 9-12 bits to do thread id waiting passing
 #define WRAP_UP_NUM_FOR_WAITING_INBOX 256

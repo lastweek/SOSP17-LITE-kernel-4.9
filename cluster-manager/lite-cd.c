@@ -824,8 +824,8 @@ int server_keep_server_alive(void *ptr)
 
 	int cur_node = 1;	//0 is server itself
 	//int ask_number_of_MR_set = ctx->num_node * ctx->num_parallel_connection;
-	int ask_number_of_MR_set =
-	    FIRST_ASK_MR_SET * ctx->num_parallel_connection;
+
+	int ask_number_of_MR_set = MAX_CONNECTION;
 	int i, j;
 
 	printf("%s(): CPU%2d\n", __func__, sched_getcpu());

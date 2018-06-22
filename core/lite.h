@@ -155,9 +155,6 @@ static inline void lite_dp(const char *fmt, ...)
 
 #define CIRCULAR_BUFFER_LENGTH 256
 
-#define MAX_NODE 4
-#define MAX_NODE_BIT 5
-
 #define LISTEN_PORT 18500
 
 /*
@@ -180,7 +177,12 @@ static inline void lite_dp(const char *fmt, ...)
 #define NR_BUNDLE_PER_PAIR		(2)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
-#define RECV_DEPTH 256
+#define MAX_NODE			(4)
+#define MAX_NODE_BIT			(5)
+
+#define MAX_CONNECTION			((MAX_NODE) * (NUM_PARALLEL_CONNECTION))
+
+#define RECV_DEPTH			256
 #define CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH 8
 #define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8)/NUM_PARALLEL_CONNECTION
 #define GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(id) (id&0x000000ff)
@@ -199,7 +201,6 @@ static inline void lite_dp(const char *fmt, ...)
 #define LID_SEND_RECV_FORMAT "0000:0000:000000:000000:00000000000000000000000000000000"
 #define NUM_POLLING_THREADS 1
 #define NUM_POLLING_WC 32
-#define MAX_CONNECTION MAX_NODE * NUM_PARALLEL_CONNECTION //Assume that MAX_CONNECTION is smaller than 256
 #define MAX_PARALLEL_THREAD 64
 #define WRAP_UP_NUM_FOR_WRID 256 //since there are 64 bits in wr_id, we are going to use 9-12 bits to do thread id waiting passing
 #define WRAP_UP_NUM_FOR_CIRCULAR_ID 256
