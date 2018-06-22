@@ -3732,7 +3732,7 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 			+ NUM_PARALLEL_CONNECTION * target_node + 1;
 #endif
 
-#if 1
+#if 0
 	int bundle_id, base_id;
 
 	/*
@@ -3747,13 +3747,20 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 
 	base_id += (atomic_inc_return(&ctx->atomic_request_num[target_node * NR_BUNDLE_PER_PAIR + bundle_id])) % NR_CONNECTIONS_PER_BUNDLE;
 
-	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d %p\n",
-		target_node, bundle_id, base_id, p);
+	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d\n",
+		target_node, bundle_id, base_id);
 	return base_id;
 
 #else
-	int id = atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
-		NUM_PARALLEL_CONNECTION * target_node;
+	atomic_t *p;
+	int tmp, id;
+
+	//int id = atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
+	//	NUM_PARALLEL_CONNECTION * target_node;
+
+	p = &ctx->atomic_request_num[target_node];
+	tmp = atomic_inc_return(p) % (NUM_PARALLEL_CONNECTION);
+	id = tmp + NUM_PARALLEL_CONNECTION * target_node;
 
 	printk("%s(): %d base_id %d\n", __func__, target_node, id);
 	return id;
