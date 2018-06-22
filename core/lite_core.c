@@ -3724,58 +3724,6 @@ inline int client_get_congestion_status(ltc *ctx, int connection_id)
 	return atomic_read(&ctx->connection_congestion_status[connection_id]);
 }
 
-/**
- * client_get_connection_by_atomic_number - get a QP based on target node (in RR order)
- * @ctx: lite context
- * @target_node: destionation node id
- * @priority: priority level
- */
-int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priority)
-{
-#ifdef PRIORITY_IMPLEMENTATION_RESOURCE
-	if(priority == USERSPACE_LOW_PRIORITY)
-		return NUM_PARALLEL_CONNECTION * target_node;
-	else
-		return atomic_inc_return(&ctx->atomic_request_num[target_node])%(NUM_PARALLEL_CONNECTION-1)
-			+ NUM_PARALLEL_CONNECTION * target_node + 1;
-#endif
-
-#if 0
-	int bundle_id, base_id;
-
-	/*
-	 * Get a random bundle ID, this can be used to emulate
-	 * random pair connection behavior. Or, you can also use
-	 * zipfan distribution here, which might be more realistic.
-	 */
-	bundle_id = get_random_int() % NR_BUNDLE_PER_PAIR;
-
-	base_id = target_node * NUM_PARALLEL_CONNECTION;
-	base_id += bundle_id * NR_CONNECTIONS_PER_BUNDLE;
-
-	base_id += (atomic_inc_return(&ctx->atomic_request_num[target_node * NR_BUNDLE_PER_PAIR + bundle_id])) % NR_CONNECTIONS_PER_BUNDLE;
-
-	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d\n",
-		target_node, bundle_id, base_id);
-	return base_id;
-
-#else
-	atomic_t *p;
-	int tmp, id;
-
-	//int id = atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
-	//	NUM_PARALLEL_CONNECTION * target_node;
-
-	p = &ctx->atomic_request_num[target_node];
-	tmp = atomic_inc_return(p) % (NUM_PARALLEL_CONNECTION);
-	id = tmp + NUM_PARALLEL_CONNECTION * target_node;
-
-	printk("%s(): %d base_id %d\n", __func__, target_node, id);
-	return id;
-#endif
-}
-EXPORT_SYMBOL(client_get_connection_by_atomic_number);
-
 void client_setup_liteapi_header(uint32_t src_id, uint64_t store_addr, uint64_t store_semaphore, uint32_t length, int priority, int type, struct liteapi_header *output_header)
 {
 	output_header->src_id = src_id;

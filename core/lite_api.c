@@ -1887,7 +1887,9 @@ uint64_t liteapi_ask_mr(int memory_space_owner_node, uint64_t identifier, uint64
 
 	ltc *ctx = LITE_ctx;
 
-	struct ask_mr_reply_form reply_mr_form;
+	struct ask_mr_reply_form *reply_mr_form;
+
+	reply_mr_form = kzalloc(sizeof(*reply_mr_form), GFP_KERNEL);
 
 	input_mr_form.identifier = identifier;
 	input_mr_form.permission = permission;
@@ -1897,36 +1899,36 @@ uint64_t liteapi_ask_mr(int memory_space_owner_node, uint64_t identifier, uint64
 	if(memory_space_owner_node!=ctx->node_id)//remote request
 	{
 		tempaddr = client_ib_reg_mr_addr(ctx, &input_mr_form, sizeof(struct ask_mr_form));
-		client_send_message_sge_UD(ctx, memory_space_owner_node, MSG_ASK_MR_1, (void *)tempaddr, sizeof(struct ask_mr_form), (uint64_t)&reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
+		client_send_message_sge_UD(ctx, memory_space_owner_node, MSG_ASK_MR_1, (void *)tempaddr, sizeof(struct ask_mr_form), (uint64_t)reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
 	}
 	else
 	{
-		client_send_message_local(ctx, memory_space_owner_node, MSG_ASK_MR_1, &input_mr_form, sizeof(struct ask_mr_form), (uint64_t)&reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
+		client_send_message_local(ctx, memory_space_owner_node, MSG_ASK_MR_1, &input_mr_form, sizeof(struct ask_mr_form), (uint64_t)reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
 	}
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 		schedule();
-	if(reply_mr_form.op_code == MR_ASK_SUCCESS)
+	if(reply_mr_form->op_code == MR_ASK_SUCCESS)
 	{
 		uint64_t ret_key;
 		struct lmr_info *ret_mr;
 		struct lmr_info **ret_mr_list;
 		int ret;
 		int i;
-		ret_mr_list = (struct lmr_info **)kmalloc(sizeof(struct lmr_info *) * reply_mr_form.list_length, GFP_KERNEL);
-		for(i=0;i<reply_mr_form.list_length;i++)
+		ret_mr_list = (struct lmr_info **)kmalloc(sizeof(struct lmr_info *) * reply_mr_form->list_length, GFP_KERNEL);
+		for(i=0;i<reply_mr_form->list_length;i++)
 		{
 			ret_mr = client_alloc_lmr_info_buf();
-			memcpy(ret_mr, &reply_mr_form.reply_mr[i], sizeof(struct lmr_info));
+			memcpy(ret_mr, &reply_mr_form->reply_mr[i], sizeof(struct lmr_info));
 			ret_mr_list[i]=ret_mr;
 		}
 		ret_key = atomic_add_return(1, &ctx->lmr_inc);
 
-		ret = client_create_metadata_by_lmr(ctx, ret_key, ret_mr_list, reply_mr_form.list_length, reply_mr_form.node_id, reply_mr_form.total_length, reply_mr_form.permission, 0, password);
+		ret = client_create_metadata_by_lmr(ctx, ret_key, ret_mr_list, reply_mr_form->list_length, reply_mr_form->node_id, reply_mr_form->total_length, reply_mr_form->permission, 0, password);
 		kfree(ret_mr_list);
 		return ret_key;
 	}
 	printk(KERN_CRIT "[%s] FAIL in askmr node %d id %lu\n", __func__, memory_space_owner_node, (unsigned long)identifier);
-	return reply_mr_form.op_code;
+	return reply_mr_form->op_code;
 
 }
 EXPORT_SYMBOL(liteapi_ask_mr);
