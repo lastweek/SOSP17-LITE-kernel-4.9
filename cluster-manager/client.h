@@ -51,8 +51,8 @@ struct atomic_struct{
 	#define SGID_INDEX -1
 #endif
 
-#define NR_CONNECTIONS_PER_BUNDLE	(2)
-#define NR_BUNDLE_PER_PAIR		(2)
+#define NR_CONNECTIONS_PER_BUNDLE	(4)
+#define NR_BUNDLE_PER_PAIR		(4)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
 #define MAX_NODE			(4)

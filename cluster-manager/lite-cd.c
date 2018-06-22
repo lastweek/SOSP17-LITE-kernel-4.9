@@ -825,10 +825,11 @@ int server_keep_server_alive(void *ptr)
 	int cur_node = 1;	//0 is server itself
 	//int ask_number_of_MR_set = ctx->num_node * ctx->num_parallel_connection;
 
-	int ask_number_of_MR_set = MAX_CONNECTION;
+	int ask_number_of_MR_set = MAX_NODE * ctx->num_parallel_connection;
 	int i, j;
 
-	printf("%s(): CPU%2d\n", __func__, sched_getcpu());
+	printf("%s(): CPU%2d ctx->num_para %d\n",
+		__func__, sched_getcpu(), ctx->num_parallel_connection);
 
 	//Initialize Configuration
 	memset(&myaddr, 0, sizeof(struct sockaddr_in));

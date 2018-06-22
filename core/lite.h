@@ -174,10 +174,10 @@ static inline void lite_dp(const char *fmt, ...)
  * the function used to select QP connection.
  */
 #define NR_CONNECTIONS_PER_BUNDLE	(4)
-#define NR_BUNDLE_PER_PAIR		(1)
+#define NR_BUNDLE_PER_PAIR		(4)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
-#define MAX_NODE			(16)
+#define MAX_NODE			(4)
 #define MAX_NODE_BIT			(5)
 
 #define MAX_CONNECTION			((MAX_NODE) * (NUM_PARALLEL_CONNECTION))
@@ -940,8 +940,8 @@ static __always_inline int client_get_connection_by_atomic_number(ltc *ctx, int 
 
 	base_id += (atomic_inc_return(&ctx->atomic_request_num[target_node * NR_BUNDLE_PER_PAIR + bundle_id])) % NR_CONNECTIONS_PER_BUNDLE;
 
-	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d\n",
-		target_node, bundle_id, base_id);
+	//pr_crit("target_node: %2d bundle_id: %2d base_id: %3d\n",
+	//	target_node, bundle_id, base_id);
 	return base_id;
 
 #else
