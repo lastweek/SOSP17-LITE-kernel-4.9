@@ -501,7 +501,7 @@ int client_setup_loopback_connections(ltc *ctx, int size, int rx_depth, int port
  */
 ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 {
-	int i, j;
+	int i;
 	int num_connections = MAX_CONNECTION;
 	ltc *ctx;
 	struct ib_cq_init_attr cq_attr_foo;
@@ -578,16 +578,8 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 
 	ctx->recv_num = kzalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 
-	ctx->atomic_request_num = kmalloc(ctx->num_node * NR_BUNDLE_PER_PAIR * sizeof(atomic_t), GFP_KERNEL);
-	for (i = 0; i < ctx->num_node; i++) {
-		for (j = 0; j < NR_BUNDLE_PER_PAIR; j++) {
-			atomic_t *p;
-
-			p = ctx->atomic_request_num + i * NR_BUNDLE_PER_PAIR + j;
-			pr_crit(" i = %d j = %d %p\n", i, j, p);
-			atomic_set(p, -1);
-		}
-	}
+	for (i = 0; i < (MAX_NODE * NR_BUNDLE_PER_PAIR); i++)
+		atomic_set(&ctx->atomic_request_num[i], -1);
 
 	ctx->atomic_request_num_high = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<ctx->num_node;i++)
@@ -3739,6 +3731,7 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 			+ NUM_PARALLEL_CONNECTION * target_node + 1;
 #endif
 
+#if 1
 	int bundle_id, base_id;
 	int nr_reqs;
 	atomic_t *p;
@@ -3753,18 +3746,21 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 	base_id = target_node * NUM_PARALLEL_CONNECTION;
 	base_id += bundle_id * NR_CONNECTIONS_PER_BUNDLE;
 
-	p = ctx->atomic_request_num + target_node * NR_BUNDLE_PER_PAIR + bundle_id;
+	p = &ctx->atomic_request_num[target_node * NR_BUNDLE_PER_PAIR + bundle_id];
 	nr_reqs = atomic_inc_return(p);
 
 	base_id += nr_reqs % NR_CONNECTIONS_PER_BUNDLE;
 
-	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d offset_within_bundle: %2d\n",
-		target_node, bundle_id, base_id, nr_reqs % NR_CONNECTIONS_PER_BUNDLE);
+	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d\n",
+		target_node, bundle_id, base_id);
 	return base_id;
 
-#if 0
-	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
+#else
+	int id = atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
 		NUM_PARALLEL_CONNECTION * target_node;
+
+	printk("%s(): %d %d\n", __func__, target_node, id);
+	return id;
 #endif
 }
 EXPORT_SYMBOL(client_get_connection_by_atomic_number);

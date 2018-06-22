@@ -173,11 +173,11 @@ static inline void lite_dp(const char *fmt, ...)
  * We embed our impl into `client_get_connection_by_atomic_number()`, which is
  * the function used to select QP connection.
  */
-#define NR_CONNECTIONS_PER_BUNDLE	(2)
-#define NR_BUNDLE_PER_PAIR		(2)
+#define NR_CONNECTIONS_PER_BUNDLE	(4)
+#define NR_BUNDLE_PER_PAIR		(1)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
-#define MAX_NODE			(4)
+#define MAX_NODE			(16)
 #define MAX_NODE_BIT			(5)
 
 #define MAX_CONNECTION			((MAX_NODE) * (NUM_PARALLEL_CONNECTION))
@@ -733,7 +733,7 @@ struct lite_context {
 
 
 	int *recv_num;
-	atomic_t *atomic_request_num;
+	atomic_t atomic_request_num[MAX_NODE * NR_BUNDLE_PER_PAIR];
 	atomic_t *atomic_request_num_high;
 	atomic_t parallel_thread_num;
 
