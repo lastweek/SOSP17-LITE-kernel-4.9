@@ -578,8 +578,9 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 
 	ctx->recv_num = kzalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 
-	for (i = 0; i < (MAX_NODE * NR_BUNDLE_PER_PAIR); i++)
+	for (i = 0; i < (MAX_NODE * NR_BUNDLE_PER_PAIR); i++) {
 		atomic_set(&ctx->atomic_request_num[i], -1);
+	}
 
 	ctx->atomic_request_num_high = kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	for(i=0;i<ctx->num_node;i++)
@@ -3733,8 +3734,6 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 
 #if 1
 	int bundle_id, base_id;
-	int nr_reqs;
-	atomic_t *p;
 
 	/*
 	 * Get a random bundle ID, this can be used to emulate
@@ -3746,20 +3745,17 @@ int client_get_connection_by_atomic_number(ltc *ctx, int target_node, int priori
 	base_id = target_node * NUM_PARALLEL_CONNECTION;
 	base_id += bundle_id * NR_CONNECTIONS_PER_BUNDLE;
 
-	p = &ctx->atomic_request_num[target_node * NR_BUNDLE_PER_PAIR + bundle_id];
-	nr_reqs = atomic_inc_return(p);
+	base_id += (atomic_inc_return(&ctx->atomic_request_num[target_node * NR_BUNDLE_PER_PAIR + bundle_id])) % NR_CONNECTIONS_PER_BUNDLE;
 
-	base_id += nr_reqs % NR_CONNECTIONS_PER_BUNDLE;
-
-	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d\n",
-		target_node, bundle_id, base_id);
+	pr_crit("target_node: %2d bundle_id: %2d base_id: %3d %p\n",
+		target_node, bundle_id, base_id, p);
 	return base_id;
 
 #else
 	int id = atomic_inc_return(&ctx->atomic_request_num[target_node]) % (NUM_PARALLEL_CONNECTION) +
 		NUM_PARALLEL_CONNECTION * target_node;
 
-	printk("%s(): %d %d\n", __func__, target_node, id);
+	printk("%s(): %d base_id %d\n", __func__, target_node, id);
 	return id;
 #endif
 }
@@ -6111,7 +6107,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		client_gen_msg(ctx, msg, i);
 		memcpy(&my_QPset[i].server_information_buffer, &msg, sizeof(msg));
 		client_ktcp_send(excsocket, msg, sizeof(LID_SEND_RECV_FORMAT));
-		udelay(100);
+		udelay(500);
 	}
 
 #if 0
