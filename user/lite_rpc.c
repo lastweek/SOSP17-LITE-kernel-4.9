@@ -305,6 +305,14 @@ void *thread_send_lat(void *_info)
 	struct thread_info *info = _info;
 	int i, b, nr_rpc;
 
+	/*
+	 * XXX
+	 * Hard-coded distribution
+	 */
+	bind_thread(55 - info->tid);
+	printf("  thread[%d] running on CPU%2d\n",
+		info->tid, sched_getcpu());
+
 	nr_rpc = 1000 * 1000 * 1;
 
 	test_async_rpc_send(info, nr_rpc);
