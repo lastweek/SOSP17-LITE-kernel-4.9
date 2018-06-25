@@ -48,6 +48,8 @@ struct thread_info {
 unsigned int nr_threads = 1;
 double *per_rps;
 
+pthread_barrier_t thread_barrier;
+
 #define NSEC_PER_SEC	(1000*1000*1000)
 static inline long timespec_diff_ns(struct timespec end, struct timespec start)
 {
@@ -172,12 +174,12 @@ void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 
 	diff_ns = timespec_diff_ns(end, start);
 
+	rps = (double)NR_SYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
+	printf("[tid: %d] Performed #%10d sync_rpc. Total %13ld ns, per RPC: %ld ns. RPC/s: %10lf\n",
+		info->tid, NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
+
 	/* save to global array */
 	per_rps[info->tid] = rps;
-
-	rps = (double)NR_SYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
-	printf("\033[31m Performed #%10d sync_rpc. Total %13ld ns, per RPC: %ld ns. RPC/s: %10lf\033[0m\n",
-		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
 }
 
 void test_sync_rpc_recv(struct thread_info *info, int NR_SYNC_RPC)
@@ -247,11 +249,13 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 
 	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
 
+	printf("[tid: %d] Performed #%10d async_rpc (batch_size: %d). "
+	       "Total %13ld ns, per-RPC: %ld ns. RPC/s: %10lf\n",
+	        info->tid,
+		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
+
 	/* save to global array */
 	per_rps[info->tid] = rps;
-
-	printf("\033[31m Performed #%10d async_rpc (batch_size: %d). Total %13ld ns, per-RPC: %ld ns. RPC/s: %10lf\033[0m\n",
-		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 }
 
 void test_async_rpc_recv(struct thread_info *info, int NR_ASYNC_RPC)
@@ -292,22 +296,28 @@ static void print_rps(int nr_rpc, const char *who)
 		total += per_rps[i];
 	}
 
-	printf(" nr_threads: %d, each thread performed #%d %s RPC, average throughput: %10lf\n",
+	printf("\033[31m  nr_threads: %d, each thread performed #%d %s RPC, average throughput: %10lf\033[0m\n",
 		nr_threads, nr_rpc, who, total/nr_threads);
 }
 
 void *thread_send_lat(void *_info)
 {
 	struct thread_info *info = _info;
-	int i, nr_rpc;
+	int i, b, nr_rpc;
 
 	nr_rpc = 1000 * 1000 * 1;
 
 	test_async_rpc_send(info, nr_rpc);
-	print_rps(nr_rpc, "async");
+
+	b = pthread_barrier_wait(&thread_barrier);
+	if (b == PTHREAD_BARRIER_SERIAL_THREAD)
+		print_rps(nr_rpc, "async");
 
 	test_sync_rpc_send(info, nr_rpc);
-	print_rps(nr_rpc, "sync");
+
+	b = pthread_barrier_wait(&thread_barrier);
+	if (b == PTHREAD_BARRIER_SERIAL_THREAD)
+		print_rps(nr_rpc, "sync");
 }
 
 void *thread_recv(void *_info)
@@ -331,6 +341,8 @@ void run(bool server_mode, int remote_node)
 	threads = malloc(sizeof(*threads) * nr_threads);
 	per_rps = malloc(sizeof(*per_rps) * nr_threads);
 	info = malloc(sizeof(*info) * nr_threads);
+
+	pthread_barrier_init(&thread_barrier, NULL, nr_threads);
 
 	sprintf(name, "test.1");
 
@@ -372,6 +384,7 @@ void run(bool server_mode, int remote_node)
 		for (i = 0; i < nr_threads; i++) {
 			info[i].inbound_port = base_port + 1;
 			info[i].outbound_port = base_port;
+			info[i].tid = i;
 			info[i].remote_nid = remote_node;
 		}
 
