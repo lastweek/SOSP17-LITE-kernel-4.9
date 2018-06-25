@@ -44,6 +44,8 @@ struct thread_info {
 	int remote_nid;
 };
 
+unsigned int nr_threads = 1;
+
 #define NSEC_PER_SEC	(1000*1000*1000)
 static inline long timespec_diff_ns(struct timespec end, struct timespec start)
 {
@@ -268,6 +270,7 @@ int base_port = 1;
 void *thread_send_lat(void *_info)
 {
 	struct thread_info *info = _info;
+#if 0
 	int ret;
 	char *read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
 	char *write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
@@ -323,6 +326,9 @@ void *thread_send_lat(void *_info)
                 }
 		memset(read, 0, 4096);
 	}
+#endif
+
+	int i;
 
 	/*
 	 * Part II
@@ -347,6 +353,7 @@ void *thread_send_lat(void *_info)
 void *thread_recv(void *_info)
 {
 	struct thread_info *info = _info;
+#if 0
 	uintptr_t descriptor, ret_descriptor;
 	int i,j,k, cnt;
 	char *read = memalign(sysconf(_SC_PAGESIZE),4096);
@@ -402,6 +409,9 @@ void *thread_recv(void *_info)
 		}
 		memset(read, 0, 4096);
 	}
+#endif
+
+	int i;
 
 	for (i = 0; i < 8; i++) {
 		int nr_rpc;
@@ -419,9 +429,16 @@ void *thread_recv(void *_info)
 
 void run(bool server_mode, int remote_node)
 {
+	int i;
 	char name[32] = {'\0'};
-	pthread_t threads[64];
+	pthread_t *threads;
 	struct thread_info *info = malloc(sizeof(*info));
+
+	threads = malloc(sizeof(*threads) * nr_threads);
+	if (!threads) {
+		printf("oom\n");
+		exit(-ENOMEM);
+	}
 
 	sprintf(name, "test.1");
 
@@ -452,8 +469,10 @@ void run(bool server_mode, int remote_node)
 		userspace_liteapi_query_port(info->remote_nid,
 					     info->outbound_port);
 
-		pthread_create(&threads[0], NULL, thread_recv, info);
-		pthread_join(threads[0], NULL);
+		for (i = 0; i < nr_threads; i++)
+			pthread_create(&threads[i], NULL, thread_recv, info);
+		for (i = 0; i < nr_threads; i++)
+			pthread_join(threads[i], NULL);
 	} else {
 		info->inbound_port = base_port + 1;
 		info->outbound_port = base_port;
@@ -472,8 +491,10 @@ void run(bool server_mode, int remote_node)
 		userspace_liteapi_query_port(info->remote_nid,
 					     info->outbound_port);
 
-                pthread_create(&threads[0], NULL, thread_send_lat, info);
-		pthread_join(threads[0], NULL);
+		for (i = 0; i < nr_threads; i++)
+                	pthread_create(&threads[i], NULL, thread_send_lat, info);
+		for (i = 0; i < nr_threads; i++)
+			pthread_join(threads[i], NULL);
 	}
 }
 
@@ -487,12 +508,14 @@ static void usage(const char *argv0)
 	printf("  -c, --client              start a client\n");
 	printf("  -s, --server              start a server\n");
 	printf("  -n, --remote_nid=<nid>    remote server_id\n");
+	printf("  --thread=<nr>             number of threads, default 1\n");
 }
 
 static struct option long_options[] = {
 	{ .name = "server",	.has_arg = 0, .val = 's' },
 	{ .name = "client",	.has_arg = 0, .val = 'c' },
 	{ .name = "remote_nid",	.has_arg = 1, .val = 'n' },
+	{ .name = "thread",	.has_arg = 1, .val = 't' },
 	{}
 };
 
@@ -504,7 +527,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		int c;
 
-		c = getopt_long(argc, argv, "n:sc",
+		c = getopt_long(argc, argv, "t:n:sc",
 				long_options, NULL);
 
 		if (c == -1)
@@ -524,6 +547,12 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 			break;
+		case 't':
+			nr_threads = strtoul(optarg, NULL, 0);
+			if (nr_threads > 56) {
+				printf("Too many threads: %d\n", nr_threads);
+				return -1;
+			}
 		default:
 			usage(argv[0]);
 			return -1;
@@ -542,9 +571,11 @@ int main(int argc, char *argv[])
 	}
 
 	if (server_mode)
-		printf("RPC server, waiting for connection..\n");
-	else
-		printf("RPC client, connect to server at %d\n", remote_nid);
+		printf("RPC server, waiting for connection nr_threads=%d\n", nr_threads);
+	else {
+		printf("RPC client, connect to server at %d nr_threads=%d\n",
+			remote_nid, nr_threads);
+	}
 
 	run(server_mode, remote_nid);
 
