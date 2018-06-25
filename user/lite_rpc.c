@@ -267,85 +267,28 @@ int testsize[7]={8,8,64,512,1024,2048,4096};
 int run_times = 10;
 int base_port = 1;
 
+/*
+ * HACK!!!
+ * Nothing is reliable.
+ * Match the number of send and recv on both ends.
+ */
+
 void *thread_send_lat(void *_info)
 {
 	struct thread_info *info = _info;
-#if 0
-	int ret;
-	char *read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
-	char *write = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
-        int ret_length;
-	int i,j,cnt;
-	uintptr_t descriptor;
-	int *async_poll_buffer;
-
-	printf("%s(): receive_message use port %d, send_reply use port %d\n",
-		__func__, info->inbound_port, info->outbound_port);
-	bind_thread(55);
-	printf("Start testing on CPU%2d\n", sched_getcpu());
-
-	memset(write, 'A', 4096);
-	memset(read, 0, 4096);
-        mlock(read, 4096);
-        mlock(write, 4096);
-        mlock(&ret_length, sizeof(int));
-
-	/*
-	 * Part I
-	 * Test Synchronous Symmetric RPC
-	 * - send_reply
-	 * - receive + reply
-	 */
-
-	/* send_reply */
-	for (cnt = 0, j = 0; j < 7; j++) {
-		for (i=0;i<run_times;i++) {
-			*(int *)write = cnt + 200;
-			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
-				info->outbound_port, write, 8, read, &ret_length, 4096);
-
-			//printf("send_reply cnt=%d send=%d receive=%d\n",\
-			//	cnt, *(int *)write, *(int *)read);
-			cnt++;
-		}
-		memset(read, 0, 4096);
-	}
-
-	/* Receive + Reply */
-	for(cnt = 0, j=0;j<7;j++) {
-                for (i=0;i<run_times;i++) {
-                        ret = userspace_liteapi_receive_message_fast(info->inbound_port,
-				read, 4096, &descriptor, &ret_length, BLOCK_CALL);
-
-			*(int *)write = cnt + 100;
-                        userspace_liteapi_reply_message(write, testsize[j], descriptor);
-
-			//printf("receive+reply cnt=%d receive=%d send=%d\n",\
-			//	cnt, *(int *)read, *(int *)write);
-			cnt++;
-                }
-		memset(read, 0, 4096);
-	}
-#endif
-
 	int i;
 
-	/*
-	 * Part II
-	 * Test A-synchronous RPC
-	 * - send_reply
-	 */
 	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
-		nr_rpc = 500 * 1000 * (i + 1);
+		nr_rpc = 5 * 1000 * (i + 1);
 		test_async_rpc_send(info, nr_rpc);
 	}
 
 	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
-		nr_rpc = 500 * 1000 * (i + 1);
+		nr_rpc = 5 * 1000 * (i + 1);
 		test_sync_rpc_send(info, nr_rpc);
 	}
 }
@@ -353,76 +296,18 @@ void *thread_send_lat(void *_info)
 void *thread_recv(void *_info)
 {
 	struct thread_info *info = _info;
-#if 0
-	uintptr_t descriptor, ret_descriptor;
-	int i,j,k, cnt;
-	char *read = memalign(sysconf(_SC_PAGESIZE),4096);
-	char *write = memalign(sysconf(_SC_PAGESIZE),4096);
-        int ret_length;
-        int ret;
-
-	printf("%s(): receive_message use port %d, send_reply use port %d\n",
-		__func__, info->inbound_port, info->outbound_port);
-	bind_thread(55);
-	printf("Start testing on CPU%2d\n", sched_getcpu());
-
-        mlock(write, 4096);
-        mlock(read, 4096);
-        mlock(&descriptor, sizeof(uintptr_t));
-        mlock(&ret_length, sizeof(int));
-	memset(write, 'B', 4096);
-	memset(read, 0, 4096);
-
-	/*
-	 * Part I
-	 * Symmetric RPC
-	 * - receive + reply
-	 * - send_reply
-	 */
-
-	/* Receive + Reply */
-	for(cnt = 0, j=0;j<7;j++) {
-                for (i=0;i<run_times;i++) {
-                        ret = userspace_liteapi_receive_message_fast(info->inbound_port,
-				read, 4096, &descriptor, &ret_length, BLOCK_CALL);
-
-			*(int *)write = cnt + 100;
-                        userspace_liteapi_reply_message(write, testsize[j], descriptor);
-
-			//printf("receive+reply cnt=%d receive=%d send=%d\n",\
-			//	cnt, *(int *)read, *(int *)write);
-			cnt++;
-                }
-		memset(read, 0, 4096);
-	}
-
-	/* send_reply */
-	for (cnt = 0, j = 0; j < 7; j++) {
-		for (i=0;i<run_times;i++) {
-			*(int *)write = cnt + 200;
-			ret = userspace_liteapi_send_reply_imm_fast(info->remote_nid,
-				info->outbound_port, write, 8, read, &ret_length, 4096);
-
-			//printf("send_reply cnt=%d send=%d receive=%d\n",\
-			//	cnt, *(int *)write, *(int *)read);
-			cnt++;
-		}
-		memset(read, 0, 4096);
-	}
-#endif
-
 	int i;
 
 	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
-		nr_rpc = 500 * 1000 * (i + 1);
+		nr_rpc = 5 * 1000 * (i + 1);
 		test_async_rpc_recv(info, nr_rpc);
 	}
 	for (i = 0; i < 8; i++) {
 		int nr_rpc;
 
-		nr_rpc = 500 * 1000 * (i + 1);
+		nr_rpc = 5 * 1000 * (i + 1);
 		test_sync_rpc_recv(info, nr_rpc);
 	}
 }
