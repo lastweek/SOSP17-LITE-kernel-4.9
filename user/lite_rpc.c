@@ -41,10 +41,12 @@ struct thread_info {
 	int inbound_port;
 	int outbound_port;
 
+	int tid;
 	int remote_nid;
 };
 
 unsigned int nr_threads = 1;
+double *per_rps;
 
 #define NSEC_PER_SEC	(1000*1000*1000)
 static inline long timespec_diff_ns(struct timespec end, struct timespec start)
@@ -170,6 +172,9 @@ void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 
 	diff_ns = timespec_diff_ns(end, start);
 
+	/* save to global array */
+	per_rps[info->tid] = rps;
+
 	rps = (double)NR_SYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
 	printf("\033[31m Performed #%10d sync_rpc. Total %13ld ns, per RPC: %ld ns. RPC/s: %10lf\033[0m\n",
 		NR_SYNC_RPC, diff_ns, diff_ns/NR_SYNC_RPC, rps);
@@ -241,6 +246,10 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	diff_ns = timespec_diff_ns(end, start);
 
 	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
+
+	/* save to global array */
+	per_rps[info->tid] = rps;
+
 	printf("\033[31m Performed #%10d async_rpc (batch_size: %d). Total %13ld ns, per-RPC: %ld ns. RPC/s: %10lf\033[0m\n",
 		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 }
@@ -273,43 +282,43 @@ int base_port = 1;
  * Match the number of send and recv on both ends.
  */
 
+static void print_rps(int nr_rpc, const char *who)
+{
+	int i;
+	double total = 0;
+
+	for (i = 0; i < nr_threads; i++) {
+		printf("   .. %10lf\n", per_rps[i]);
+		total += per_rps[i];
+	}
+
+	printf(" nr_threads: %d, each thread performed #%d %s RPC, average throughput: %10lf\n",
+		nr_threads, nr_rpc, who, total/nr_threads);
+}
+
 void *thread_send_lat(void *_info)
 {
 	struct thread_info *info = _info;
-	int i;
+	int i, nr_rpc;
 
-	for (i = 0; i < 8; i++) {
-		int nr_rpc;
+	nr_rpc = 1000 * 1000 * 1;
 
-		nr_rpc = 5 * 1000 * (i + 1);
-		test_async_rpc_send(info, nr_rpc);
-	}
+	test_async_rpc_send(info, nr_rpc);
+	print_rps(nr_rpc, "async");
 
-	for (i = 0; i < 8; i++) {
-		int nr_rpc;
-
-		nr_rpc = 5 * 1000 * (i + 1);
-		test_sync_rpc_send(info, nr_rpc);
-	}
+	test_sync_rpc_send(info, nr_rpc);
+	print_rps(nr_rpc, "sync");
 }
 
 void *thread_recv(void *_info)
 {
 	struct thread_info *info = _info;
-	int i;
+	int i, nr_rpc;
 
-	for (i = 0; i < 8; i++) {
-		int nr_rpc;
+	nr_rpc = 1000 * 1000 * 1;
 
-		nr_rpc = 5 * 1000 * (i + 1);
-		test_async_rpc_recv(info, nr_rpc);
-	}
-	for (i = 0; i < 8; i++) {
-		int nr_rpc;
-
-		nr_rpc = 5 * 1000 * (i + 1);
-		test_sync_rpc_recv(info, nr_rpc);
-	}
+	test_async_rpc_recv(info, nr_rpc);
+	test_sync_rpc_recv(info, nr_rpc);
 }
 
 void run(bool server_mode, int remote_node)
@@ -317,13 +326,11 @@ void run(bool server_mode, int remote_node)
 	int i;
 	char name[32] = {'\0'};
 	pthread_t *threads;
-	struct thread_info *info = malloc(sizeof(*info));
+	struct thread_info *info;
 
 	threads = malloc(sizeof(*threads) * nr_threads);
-	if (!threads) {
-		printf("oom\n");
-		exit(-ENOMEM);
-	}
+	per_rps = malloc(sizeof(*per_rps) * nr_threads);
+	info = malloc(sizeof(*info) * nr_threads);
 
 	sprintf(name, "test.1");
 
@@ -335,13 +342,16 @@ void run(bool server_mode, int remote_node)
 	 * By doing this, server/client can both send RPC to each other.
 	 */
 	if (server_mode) {
-		info->inbound_port = base_port;
-		info->outbound_port = base_port + 1;
+		for (i = 0; i < nr_threads; i++) {
+			info[i].inbound_port = base_port;
+			info[i].outbound_port = base_port + 1;
+			info[i].tid = i;
 
-		/* XXX: hardcoded */
-		info->remote_nid = 1;
+			/* XXX: hardcoded */
+			info[i].remote_nid = 1;
+		}
 
-       		userspace_liteapi_register_application(info->inbound_port,
+       		userspace_liteapi_register_application(info[0].inbound_port,
 			4096, 16, name, strlen(name));
 
                 userspace_liteapi_dist_barrier(2);
@@ -351,19 +361,21 @@ void run(bool server_mode, int remote_node)
 		 * Server should query client's inboud port info,
 		 * which is base_port + 1
 		 */
-		userspace_liteapi_query_port(info->remote_nid,
-					     info->outbound_port);
+		userspace_liteapi_query_port(info[0].remote_nid,
+					     info[0].outbound_port);
 
 		for (i = 0; i < nr_threads; i++)
-			pthread_create(&threads[i], NULL, thread_recv, info);
+			pthread_create(&threads[i], NULL, thread_recv, info + i);
 		for (i = 0; i < nr_threads; i++)
 			pthread_join(threads[i], NULL);
 	} else {
-		info->inbound_port = base_port + 1;
-		info->outbound_port = base_port;
-		info->remote_nid = remote_node;
+		for (i = 0; i < nr_threads; i++) {
+			info[i].inbound_port = base_port + 1;
+			info[i].outbound_port = base_port;
+			info[i].remote_nid = remote_node;
+		}
 
-       		userspace_liteapi_register_application(info->inbound_port,	
+       		userspace_liteapi_register_application(info[0].inbound_port,	
 			4096, 16, name, strlen(name));
 
                 userspace_liteapi_dist_barrier(2);
@@ -373,11 +385,11 @@ void run(bool server_mode, int remote_node)
 		 * Client should query server's inboud port info,
 		 * which is base_port
 		 */
-		userspace_liteapi_query_port(info->remote_nid,
-					     info->outbound_port);
+		userspace_liteapi_query_port(info[0].remote_nid,
+					     info[0].outbound_port);
 
 		for (i = 0; i < nr_threads; i++)
-                	pthread_create(&threads[i], NULL, thread_send_lat, info);
+                	pthread_create(&threads[i], NULL, thread_send_lat, info + i);
 		for (i = 0; i < nr_threads; i++)
 			pthread_join(threads[i], NULL);
 	}
@@ -438,6 +450,7 @@ int main(int argc, char *argv[])
 				printf("Too many threads: %d\n", nr_threads);
 				return -1;
 			}
+			break;
 		default:
 			usage(argv[0]);
 			return -1;
