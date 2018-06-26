@@ -908,7 +908,7 @@ int server_keep_server_alive(void *ptr)
 		memcpy(&server_reply.client_list[cur_node], &loop_cache,
 		       sizeof(struct client_data));
 
-#if 0
+#ifndef NO_IB_BETWEEN_SERVER_CLIENT
 		/*
 		 * Original way:
 		 * Client and server they use both socket and UD to talk,
@@ -1052,7 +1052,7 @@ int server_keep_server_alive(void *ptr)
 				printf("%s(): j=%d, before sending to node: %d\n", __func__, j, i);
 				server_sock_send(i, MSG_NODE_JOIN, ret_mr_2);
 
-				sleep(1);
+				usleep(500*1000);
 			}
 
 			sleep(1);
@@ -1060,7 +1060,7 @@ int server_keep_server_alive(void *ptr)
 			server_send_stop(cur_node);
 			server_send_stop(i);
 		}
-#endif
+#endif /* NO_IB_BETWEEN_SERVER_CLIENT */
 
 		memset(&loop_cache, 0, sizeof(struct client_data));
 		memset(recv_buf, 0, sizeof LID_SEND_RECV_FORMAT);
@@ -1876,9 +1876,11 @@ int liteapi_init(int ib_port, int ethernet_port, int option)
 	if (ret != 0)
 		die("mutex error while creating fifo_lock_mutex\n");
 
+#if 0
 	if (MAX_NODE * NUM_PARALLEL_CONNECTION >= WRAP_UP_NUM_FOR_WRID) {
 		die("MAX_NODE * NUM_PARALLEL_CONNECTION is larger than WRAP_UP_NUM_FOR_WRID, please modify it\n");
 	}
+#endif
 
 	ctx->ah_attrUD[0].qpn = ctx->qp->qp_num;
 	ctx->ah_attrUD[0].node_id = 0;

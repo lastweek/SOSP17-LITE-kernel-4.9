@@ -123,7 +123,9 @@ static inline void lite_dp(const char *fmt, ...)
 
 #define DEBUG_SHINYEH
 
-//#define LITE_ROCE
+#if 0
+#define LITE_ROCE
+#endif
 
 #ifdef LITE_ROCE
 	#define SGID_INDEX 0
@@ -131,22 +133,8 @@ static inline void lite_dp(const char *fmt, ...)
 	#define SGID_INDEX -1
 #endif
 
-/*
- * This determines where LITE internal threads will be running.
- * It is better to run on the same node where IB card is plugged in.
- */
-#define LITE_NUMA_NODE	(1)
-
 #define MAX_LITE_NUM 4
 #define MESSAGE_SIZE 4096
-
-/*
- * This define the maximum send/recv SGE a QP can support.
- * This must be lower than the maximum your IB card can support.
- * Otherwise you will fail to create qp.
- */
-#define LITE_MAX_RC_SGE	16
-#define LITE_MAX_UD_SGE	16
 
 #define LITE_USERSPACE_FLAG 1
 #define LITE_KERNELSPACE_FLAG 0
@@ -158,6 +146,37 @@ static inline void lite_dp(const char *fmt, ...)
 #define LISTEN_PORT 18500
 
 /*
+ * Disallow IB connection between client and server.
+ * By doing so, you can run the server and one of the client on the same machine.
+ * This is especially useful when you want to test back-to-back connected IB.
+ *
+ * Client and Server should have same configuration.
+ *
+ *	- ys
+ */
+#if 1
+#define NO_IB_BETWEEN_SERVER_CLIENT
+#endif
+
+/*
+ * This determines where LITE internal threads will be running.
+ * It is better to run on the same node where IB card is plugged in.
+ *
+ *	- ys
+ */
+#define LITE_NUMA_NODE			(1)
+
+/*
+ * This define the maximum send/recv SGE a QP can support.
+ * This must be lower than the maximum your IB card can support.
+ * Otherwise you will fail to create qp.
+ *
+ *	- ys
+ */
+#define LITE_MAX_RC_SGE	16
+#define LITE_MAX_UD_SGE	16
+
+/*
  * NUM_PARALLEL_CONNECTION stands for number of connections between a pair of
  * physical machines. And these connections are shared by all application threads.
  *
@@ -166,15 +185,15 @@ static inline void lite_dp(const char *fmt, ...)
  * machine has @NR_BUNDLE_PER_PAIR bundles.
  *
  * Why?
- * The selection of connection used to be RR. Now we want to emulate pairs by
- * using only 1 pair. Our solution: 1) Each bundle stands for a virtual pair,
- * 2) within each virtual pair, connections are selected by RR policy.
+ * Used to emulate machines. We embed our impl into `client_get_connection_by_atomic_number()`,
+ * which is the function used to select QP connection.
  *
- * We embed our impl into `client_get_connection_by_atomic_number()`, which is
- * the function used to select QP connection.
+ * Client and Server should have same configuration.
+ *
+ *	- ys
  */
 #define NR_CONNECTIONS_PER_BUNDLE	(4)
-#define NR_BUNDLE_PER_PAIR		(8)
+#define NR_BUNDLE_PER_PAIR		(48)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
 #define MAX_NODE			(4)

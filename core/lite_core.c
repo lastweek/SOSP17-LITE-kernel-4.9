@@ -6082,7 +6082,7 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		udelay(500);
 	}
 
-#if 0
+#ifndef NO_IB_BETWEEN_SERVER_CLIENT
 	//Connect RC to CD
         memset(&recv_ah, 0, sizeof(struct client_ah_combined));
         memset(&send_ah, 0, sizeof(struct client_ah_combined));
@@ -6126,7 +6126,12 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 	}
 	client_ktcp_send(excsocket, (char *)&send_ah, sizeof(struct client_ah_combined));
 	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, NODE_ID);
+
 #else
+	/*
+	 * Okay, no IB connection between server and client.
+	 * Used when testing b2b IB.
+	 */
 
         memset(&recv_ah, 0, sizeof(struct client_ah_combined));
         memset(&send_ah, 0, sizeof(struct client_ah_combined));
@@ -6185,7 +6190,8 @@ ltc *client_establish_conn(struct ib_device *ib_dev, char *servername, int eth_p
 		return NULL;
 	}
 	wake_up_process(sock_fd_thread);
-#endif
+#endif /* NO_IB_BETWEEN_SERVER_CLIENT */
+
 	return ctx;
 }
 EXPORT_SYMBOL(client_establish_conn);

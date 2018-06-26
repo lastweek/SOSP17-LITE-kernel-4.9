@@ -43,16 +43,35 @@ struct atomic_struct{
 
 #include "fifo.h"
 
+/*
+ * Disallow IB connection between client and server.
+ * By doing so, you can run the server and one of the client on the same machine.
+ * This is especially useful when you want to test back-to-back connected IB.
+ *
+ * Client and Server should have same configuration.
+ *
+ *	- ys
+ */
+#if 1
+#define NO_IB_BETWEEN_SERVER_CLIENT
+#endif
 
+#if 1
 #define LITE_ROCE
+#endif
+
 #ifdef LITE_ROCE
 	#define SGID_INDEX 0
 #else
 	#define SGID_INDEX -1
 #endif
 
+/*
+ * Used to emulate machines.
+ * Check core/lite.h for details.
+ */
 #define NR_CONNECTIONS_PER_BUNDLE	(4)
-#define NR_BUNDLE_PER_PAIR		(4)
+#define NR_BUNDLE_PER_PAIR		(48)
 #define NUM_PARALLEL_CONNECTION		((NR_CONNECTIONS_PER_BUNDLE) * (NR_BUNDLE_PER_PAIR))
 
 #define MAX_NODE			(4)
