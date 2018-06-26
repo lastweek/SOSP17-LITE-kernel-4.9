@@ -1,3 +1,4 @@
+#define PREFIX "LITE: "
 #include "lite_core.h"
 MODULE_AUTHOR("yiying, shinyeh");
 MODULE_LICENSE("GPL");
@@ -3394,13 +3395,21 @@ int client_poll_cq_UD_pass(struct thread_pass_struct *input)
 int client_poll_cq_UD(ltc *ctx, struct ib_cq *target_cq)
 {
 	int ne;
-	struct ib_wc wc[NUM_PARALLEL_CONNECTION];
+	struct ib_wc *wc;
+	size_t wc_size;
 	int i;
 #ifdef NOTIFY_MODEL_UD
 	int test_result = 0;
 #endif
 
 	allow_signal(SIGKILL);
+
+	wc_size = sizeof(*wc) * NUM_PARALLEL_CONNECTION;
+	wc = kzalloc(wc_size, GFP_KERNEL);
+	if (!wc) {
+		pr_err("Fail to allocate ib_wc array, size: %zu\n", wc_size);
+		return -ENOMEM;
+	}
 
 	while(1) {
 #ifdef NOTIFY_MODEL_UD
