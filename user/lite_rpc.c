@@ -145,7 +145,8 @@ static inline void wait_for_completion(int *poll)
  * @NR_OUTSTANDING_ASYNC_RPC is the maximum outstanding a-sync rpc requests.
  * Every these number of a-sync request, we need to check poll.
  */
-static int async_batch_size = 32;
+#define ASYNC_BATCH_LIMIT	(1024)
+static unsigned int async_batch_size = 32;
 
 void test_sync_rpc_send(struct thread_info *info, int NR_SYNC_RPC)
 {
@@ -214,7 +215,7 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	int i, base, ret;
 	char *read, *write;
 	struct timespec start, end;
-	struct timespec async_start, async_end;
+	struct timespec async_start_prev, async_start, async_end;
 	long diff_ns, async_diff_ns;
 	double rps;
 
@@ -229,6 +230,8 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 
 	info->nr_async_recorded = 0;
 	info->total_async_lat = 0;
+	memset(&async_start_prev, 0, sizeof(struct timespec));
+	memset(&async_start, 0, sizeof(struct timespec));
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
@@ -243,8 +246,10 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 		else
 			record_async = false;
 
-		if (record_async)
+		if (record_async) {
+			async_start_prev = async_start;
 			clock_gettime(CLOCK_MONOTONIC, &async_start);
+		}
 
 		/*
 		 * send 4 bytes 
@@ -253,24 +258,25 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 		async_rpc(info->remote_nid, info->outbound_port,
 			write, 4, read, &poll_array[i % async_batch_size], 4096);
 
-		/*
-		 * Perform batch completion check
-		 */
+		/* Perform batch completion check */
 		if ((i % async_batch_size == 0) && i != 0) {
 			int k;
 
-			base = i - async_batch_size;
-			for (k = 0; k < async_batch_size; k++) {
-				wait_for_completion(&poll_array[(base + k) & async_batch_size]);
-
-				if (record_async) {
-					clock_gettime(CLOCK_MONOTONIC, &async_end);
-					async_diff_ns = timespec_diff_ns(async_end,
-									 async_start);
+			/* This means we only record the first rpc in a batch */
+			if (record_async) {
+				clock_gettime(CLOCK_MONOTONIC, &async_end);
+				async_diff_ns = timespec_diff_ns(async_end,
+								 async_start_prev);
+				if (async_diff_ns > 0) {
 					info->nr_async_recorded++;
 					info->total_async_lat += async_diff_ns;
-				}
+				} else
+					BUG();
 			}
+
+			base = i - async_batch_size;
+			for (k = 0; k < async_batch_size; k++)
+				wait_for_completion(&poll_array[(base + k) & async_batch_size]);
 		}
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
@@ -282,13 +288,14 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	/* save to global array */
 	per_rps[info->tid] = rps;
 
-	printf("[tid: %d] Performed #%10d async_rpc (batch_size: %d). "
-	       "Total %13ld ns, per-RPC: %ld ns. RPC/s: %10lf\n",
+	printf("[tid: %d] Performed #%10d async_rpc (batch_size: %u). "
+	       "Total %13ld ns. RPC/s: %10lf\n",
 	        info->tid,
-		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
+		NR_ASYNC_RPC, async_batch_size, diff_ns, rps);
 
 	if (record_async_latency) {
-		printf("  async_rpc latency numbers: total = %12lf ns, nr = %d, avg = %12lf ns\n",
+		printf("  ..\033[32m [tid: %d] async_rpc latency numbers: total = %12lf ns, nr = %d, avg = %12lf ns \033[0m\n",
+			info->tid,
 			info->total_async_lat, info->nr_async_recorded,
 			info->total_async_lat / info->nr_async_recorded);
 	}
@@ -458,6 +465,10 @@ static void usage(const char *argv0)
 	printf("Usage:\n");
 	printf("  %s -s                    start a server and wait for connection\n", argv0);
 	printf("  %s -c -n <nid>           start a client and connect to server at <nid>\n", argv0);
+	printf("  %s -c -n <nid> -b 128\n", argv0);
+	printf("  %s -c -n <nid> --thread=16\n", argv0);
+	printf("  %s -c -n <nid> -b 128 --thread=16\n", argv0);
+	printf("  %s -c -n <nid> -b 128 --thread=16 --async-latency\n", argv0);
 	printf("\n");
 	printf("Options:\n");
 	printf("  -c, --client              start a client\n");
@@ -465,6 +476,10 @@ static void usage(const char *argv0)
 	printf("  -n, --remote_nid=<nid>    remote server_id\n");
 	printf("  --thread=<nr>             number of threads, default 1\n");
 	printf("  --async-latency           calculate async RPC end-to-end latency\n");
+	printf("  -b, --async-batch=<nr>\n"
+	       "                            async rpc batch size.\n"
+	       "                            Default is 32. Limit is %d\n"
+	       "                            Large batch size will have high per-async RPC latency.\n", ASYNC_BATCH_LIMIT);
 }
 
 static struct option long_options[] = {
@@ -473,6 +488,7 @@ static struct option long_options[] = {
 	{ .name = "remote_nid",		.has_arg = 1, .val = 'n' },
 	{ .name = "thread",		.has_arg = 1, .val = 't' },
 	{ .name = "async-latency",	.has_arg = 0, .val = 'a' },
+	{ .name = "async-batch",	.has_arg = 1, .val = 'b' },
 	{}
 };
 
@@ -484,7 +500,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		int c;
 
-		c = getopt_long(argc, argv, "t:n:sca",
+		c = getopt_long(argc, argv, "b:t:n:sca",
 				long_options, NULL);
 
 		if (c == -1)
@@ -499,6 +515,13 @@ int main(int argc, char *argv[])
 			break;
 		case 'a':
 			record_async_latency = true;
+			break;
+		case 'b':
+			async_batch_size = strtoul(optarg, NULL, 0);
+			if (async_batch_size > ASYNC_BATCH_LIMIT) {
+				usage(argv[0]);
+				return -1;
+			}
 			break;
 		case 'n':
 			remote_nid = strtoul(optarg, NULL, 0);
