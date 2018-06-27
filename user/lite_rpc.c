@@ -43,12 +43,15 @@ struct thread_info {
 
 	int tid;
 	int remote_nid;
+
+	int nr_async_recorded;
+	double total_async_lat;
 };
 
-unsigned int nr_threads = 1;
-double *per_rps;
-
-pthread_barrier_t thread_barrier;
+static bool record_async_latency = false;
+static unsigned int nr_threads = 1;
+static double *per_rps;
+static pthread_barrier_t thread_barrier;
 
 #define NSEC_PER_SEC	(1000*1000*1000)
 static inline long timespec_diff_ns(struct timespec end, struct timespec start)
@@ -211,7 +214,8 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	int i, base, ret;
 	char *read, *write;
 	struct timespec start, end;
-	long diff_ns;
+	struct timespec async_start, async_end;
+	long diff_ns, async_diff_ns;
 	double rps;
 
 	read = memalign(sysconf(_SC_PAGESIZE), 4096 * 2);
@@ -223,8 +227,25 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 	mlock(write, 4096);
 	mlock(poll_array, sizeof(int) * NR_ASYNC_RPC);
 
+	info->nr_async_recorded = 0;
+	info->total_async_lat = 0;
+
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NR_ASYNC_RPC; i++) {
+		bool record_async;
+
+		/*
+		 * Only record the async time at each polling batch boundary.
+		 * Cause otherwise all the clock_gettime latency will be included.
+		 */
+		if (record_async_latency && (i % async_batch_size == 0))
+			record_async = true;
+		else
+			record_async = false;
+
+		if (record_async)
+			clock_gettime(CLOCK_MONOTONIC, &async_start);
+
 		/*
 		 * send 4 bytes 
 		 * And only use [0, async_batch_size) portion of poll array.
@@ -239,8 +260,17 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 			int k;
 
 			base = i - async_batch_size;
-			for (k = 0; k < async_batch_size; k++)
+			for (k = 0; k < async_batch_size; k++) {
 				wait_for_completion(&poll_array[(base + k) & async_batch_size]);
+
+				if (record_async) {
+					clock_gettime(CLOCK_MONOTONIC, &async_end);
+					async_diff_ns = timespec_diff_ns(async_end,
+									 async_start);
+					info->nr_async_recorded++;
+					info->total_async_lat += async_diff_ns;
+				}
+			}
 		}
 	}
 	clock_gettime(CLOCK_MONOTONIC, &end);
@@ -249,13 +279,19 @@ void test_async_rpc_send(struct thread_info *info, int NR_ASYNC_RPC)
 
 	rps = (double)NR_ASYNC_RPC / ((double)diff_ns / (double)NSEC_PER_SEC);
 
+	/* save to global array */
+	per_rps[info->tid] = rps;
+
 	printf("[tid: %d] Performed #%10d async_rpc (batch_size: %d). "
 	       "Total %13ld ns, per-RPC: %ld ns. RPC/s: %10lf\n",
 	        info->tid,
 		NR_ASYNC_RPC, async_batch_size, diff_ns, diff_ns/NR_ASYNC_RPC, rps);
 
-	/* save to global array */
-	per_rps[info->tid] = rps;
+	if (record_async_latency) {
+		printf("  async_rpc latency numbers: total = %12lf ns, nr = %d, avg = %12lf ns\n",
+			info->total_async_lat, info->nr_async_recorded,
+			info->total_async_lat / info->nr_async_recorded);
+	}
 }
 
 void test_async_rpc_recv(struct thread_info *info, int NR_ASYNC_RPC)
@@ -349,6 +385,7 @@ void run(bool server_mode, int remote_node)
 	threads = malloc(sizeof(*threads) * nr_threads);
 	per_rps = malloc(sizeof(*per_rps) * nr_threads);
 	info = malloc(sizeof(*info) * nr_threads);
+	memset(info, 0, sizeof(*info) * nr_threads);
 
 	pthread_barrier_init(&thread_barrier, NULL, nr_threads);
 
@@ -427,13 +464,15 @@ static void usage(const char *argv0)
 	printf("  -s, --server              start a server\n");
 	printf("  -n, --remote_nid=<nid>    remote server_id\n");
 	printf("  --thread=<nr>             number of threads, default 1\n");
+	printf("  --async-latency           calculate async RPC end-to-end latency\n");
 }
 
 static struct option long_options[] = {
-	{ .name = "server",	.has_arg = 0, .val = 's' },
-	{ .name = "client",	.has_arg = 0, .val = 'c' },
-	{ .name = "remote_nid",	.has_arg = 1, .val = 'n' },
-	{ .name = "thread",	.has_arg = 1, .val = 't' },
+	{ .name = "server",		.has_arg = 0, .val = 's' },
+	{ .name = "client",		.has_arg = 0, .val = 'c' },
+	{ .name = "remote_nid",		.has_arg = 1, .val = 'n' },
+	{ .name = "thread",		.has_arg = 1, .val = 't' },
+	{ .name = "async-latency",	.has_arg = 0, .val = 'a' },
 	{}
 };
 
@@ -445,7 +484,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		int c;
 
-		c = getopt_long(argc, argv, "t:n:sc",
+		c = getopt_long(argc, argv, "t:n:sca",
 				long_options, NULL);
 
 		if (c == -1)
@@ -457,6 +496,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			client_mode = true;
+			break;
+		case 'a':
+			record_async_latency = true;
 			break;
 		case 'n':
 			remote_nid = strtoul(optarg, NULL, 0);
