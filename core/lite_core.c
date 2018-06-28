@@ -4008,7 +4008,8 @@ retry_send_request:
 				goto retry_send_request;
                 }
 	} else
-		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
+		printk(KERN_INFO "%s: send fail %d ret %d\n",
+			__func__, connection_id, ret);
 
 	return ret;
 }
@@ -4047,7 +4048,7 @@ int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *ch
                         }
 
                         if((*check)!=SEND_REPLY_WAIT)
-                                break;
+                         	      break;
                 } while (ne < 1);
 
                 for (i = 0; i < ne; i++) {

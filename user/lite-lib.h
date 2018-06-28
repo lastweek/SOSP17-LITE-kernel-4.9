@@ -56,6 +56,7 @@
 #define __NR_lite_get_total_node 424
 #define __NR_lite_reply_and_receive_message 425
 #define __NR_lite_join 426
+#define __NR_lite_rdma_read_async 427
 
 #define max(x, y)				\
 ({						\
@@ -105,6 +106,9 @@ struct receive_struct{
 #define IMM_MAX_PRIORITY_BIT 6
 
 #define SEND_REPLY_WAIT (-101)
+
+/* Added by Yizhou, to impl async rdma read without adding another syscall */
+#define ASYNC_RDMA_READ_IN_PASSWORD	(0x10000000)
 
 #define CHECK_LENGTH 100000
 
@@ -168,5 +172,8 @@ int userspace_syscall_test(void);
 int userspace_liteapi_join(char *input_str, int eth_port, int ib_port);
 int stick_this_thread_to_core(int core_id);
 int userspace_liteapi_send(int target_node, unsigned int port, void *addr, int size);
+
+int async_rdma_read(unsigned lite_handler, void *local_addr, unsigned int size,
+		    unsigned int offset, int *poll);
 
 #endif /* FIT_LIB_H */

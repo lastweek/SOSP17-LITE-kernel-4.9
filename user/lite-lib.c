@@ -234,6 +234,12 @@ inline int userspace_liteapi_rdma_read_low(unsigned lite_handler, void *local_ad
 	return syscall(__NR_lite_rdma_read, lite_handler, local_addr, size, USERSPACE_LOW_PRIORITY, offset, password);
 }
 
+int async_rdma_read(unsigned lite_handler, void *local_addr, unsigned int size,
+		    unsigned int offset, int *poll)
+{
+	return syscall(__NR_lite_rdma_read_async, lite_handler, local_addr, size, NULL_PRIORITY, offset, poll);
+}
+
 void* userspace_liteapi_alloc_memory(unsigned long size)
 {
 	unsigned long roundup_size = (((1<<PAGE_SHIFT) + size - 1)>>PAGE_SHIFT)<<PAGE_SHIFT;

@@ -88,7 +88,7 @@ static void ibv_add_one(struct ib_device *device)
 	pr_info("%s(): liteapi_dev=%p(%s) device=%p(%s)\n",
 		__func__, liteapi_dev, liteapi_dev ? liteapi_dev->name : " ", device, device->name);
 
-#if 1
+#if 0
 	if (liteapi_dev) {
 		pr_info(" skip\n");
 		return;
@@ -824,11 +824,21 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr,
 }
 EXPORT_SYMBOL(liteapi_rdma_read_offset_userspace);
 
+/*
+ * increase only
+ */
+atomic_t nr_batched_async_read[MAX_CONNECTION];
+int poll_sendcq_for_async_read(struct ib_cq *tar_cq, int connection_id);
+
+/*
+ * The hook for async RDMA read.
+ * @poll is the user polling point.
+ */
 int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_addr,
-				       int size, int priority, int offset, int *poll)
+				       int size, int priority, int offset, int * __user poll)
 {
 	int target_node;
-	int connection_id;
+	int connection_id = -1;
 	struct lmr_info *mr_addr;
 	struct lmr_info **mr_addr_list;
 	int request_length;
@@ -841,7 +851,12 @@ int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
 	int access_index[LITE_MAX_MEMORY_BLOCK], access_length[LITE_MAX_MEMORY_BLOCK], access_offset[LITE_MAX_MEMORY_BLOCK], accumulate_length[LITE_MAX_MEMORY_BLOCK];
         int poll_status[LITE_MAX_MEMORY_BLOCK], connection_id_list[LITE_MAX_MEMORY_BLOCK];
-	unsigned long priority_jiffies;
+
+	bool async_enabled = true;
+	bool force_poll = false;
+	unsigned long poll_pa;
+	int *poll_kva = NULL;
+	int nr_batched = 0;
 
 	memset(access_index, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	memset(access_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
@@ -853,56 +868,107 @@ int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_
 		return MR_ASK_REFUSE;
 	if(!(mr_ptr->permission & MR_READ_FLAG))
 		return MR_ASK_REFUSE;
-
 	mr_addr_list = mr_ptr->datalist;
 	if(!mr_addr_list)
 		return MR_ASK_UNKNOWN;
 
-	if(priority)
-		liteapi_priority_handling(priority, PRIORITY_START, &priority_jiffies, PRIORITY_READ);
-
 	request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
 
-	for(i=0;i<request_length;i++) {
+	/*
+	 * Use only passed 1 polling point
+	 * If the buffer across the boudary, make it sync.
+	 * And just leave the following code as is.
+	 *	- ys
+	 */
+	if (request_length != 1)
+		async_enabled = false;
+
+	if (!poll || !lite_check_page_continuous(poll, sizeof(int), &poll_pa)) {
+		/*
+		 * It is NOT contiguous
+		 * So we can not do async read.
+		 */
+		async_enabled = false;
+	} else {
+		/*
+		 * Okay, good.
+		 */
+		poll_kva = phys_to_virt(poll_pa);
+		*poll_kva = SEND_REPLY_WAIT;
+	}
+
+	for (i=0;i<request_length;i++) {
 		curr_index = access_index[i];
 		curr_length = access_length[i];
 		curr_offset = access_offset[i];
 		curr_accumulate = accumulate_length[i];
 		mr_addr = mr_addr_list[curr_index];
-                poll_status[i] = SEND_REPLY_WAIT;
+		poll_status[i] = SEND_REPLY_WAIT;
                 real_addr_list[i]=0;
                 connection_id_list[i] = -1;
 
 		target_node = mr_addr->node_id;
-		if(target_node == ctx->node_id)//local access
-		{
+		if( target_node == ctx->node_id) {
 			void *real_addr;
-			real_addr = __va(mr_addr->addr + curr_offset);//get virtual addr from physical addr
-			//memcpy(local_addr, real_addr+offset, size);
-			if(copy_to_user(local_addr + curr_accumulate, real_addr, curr_length))
+			real_addr = __va(mr_addr->addr + curr_offset);
+			if(copy_to_user(local_addr + curr_accumulate,
+					real_addr, curr_length))
 				return -EFAULT;
 			continue;
 		}
 
-		connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
+		connection_id = client_get_connection_by_atomic_number(ctx, target_node, 0);
                 connection_id_list[i] = connection_id;
 
-		if(lite_check_page_continuous(local_addr + curr_accumulate , curr_length, &phys_addr))//It's continuous
-		{
-			real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
-			//printk(KERN_CRIT "%s: continuous %d\n", __func__, size);
-			client_send_request(ctx, connection_id, M_READ, mr_addr, real_addr, curr_length, curr_offset, LITE_USERSPACE_FLAG, &poll_status[i]);
+		/*
+		 * HACK!!
+		 *
+		 * We can not do unlimited async read. At some certain point, we need
+		 * to poll the send_cq to clear all the CQE, and also set the old
+		 * poll point to 0.
+		 *
+		 * Here, I choose RECV_DEPTH/2, can be other values as well.
+		 */
+		nr_batched = atomic_inc_return(&nr_batched_async_read[connection_id]);
+		if (nr_batched % (RECV_DEPTH/2) == 0) {
+			force_poll = true;
+			async_enabled = false;
 		}
-		else
-		{
-			real_addr_list[i] = kmalloc(curr_length, GFP_KERNEL);
-			client_send_request(ctx, connection_id, M_READ, mr_addr, real_addr_list[i], curr_length, curr_offset, LITE_KERNELSPACE_FLAG, &poll_status[i]);
+
+		if (lite_check_page_continuous(local_addr + curr_accumulate,
+					       curr_length, &phys_addr)) {
+			/* It is contiguous */
+			real_addr = (void *)phys_to_dma(ibd->dma_device,
+							(phys_addr_t)phys_addr);
+
+			client_send_request(ctx, connection_id, M_READ, mr_addr,
+					    real_addr, curr_length,
+					    curr_offset, LITE_USERSPACE_FLAG,
+					    async_enabled ? poll_kva : &poll_status[i]);
+		} else {
+			/*
+			 * The case where we need to do another memcpy.
+			 *	- ys
+			 */
+			async_enabled = false;
+
+			real_addr_list[i] = kzalloc(curr_length, GFP_KERNEL);
+
+			client_send_request(ctx, connection_id, M_READ, mr_addr,
+					    real_addr_list[i], curr_length,	
+					    curr_offset, LITE_KERNELSPACE_FLAG,
+					    &poll_status[i]);
 		}
 	}
 
-	for(i = 0; i < request_length;i++)
-        {
-                if(connection_id_list[i]<0)//local access
+	//pr_info("Async_enabled: %d Force_poll: %d Connection %4d, nr: %5d\n",
+	//	!!async_enabled, !!force_poll, connection_id, nr_batched);
+
+	if (async_enabled && !force_poll)
+		return 0;
+
+	for(i = 0; i < request_length;i++) {
+                if(connection_id_list[i]<0)
                         continue;
 		curr_index = access_index[i];
 		curr_length = access_length[i];
@@ -910,9 +976,20 @@ int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_
 		curr_accumulate = accumulate_length[i];
 		mr_addr = mr_addr_list[curr_index];
 
-                client_internal_poll_sendcq(ctx->send_cq[connection_id_list[i]],
-					    connection_id_list[i],
-					    &poll_status[i]);
+		/*
+		 * A slightly different polling requirement for
+		 * two different cases...
+		 *
+		 * 1) Reach the async batch threshold, must poll.
+		 * 2) This single async call is not able to do async.
+		 */
+		if (force_poll)
+			poll_sendcq_for_async_read(ctx->send_cq[connection_id_list[i]],
+						   connection_id_list[i]);
+		else
+                	client_internal_poll_sendcq(ctx->send_cq[connection_id_list[i]],
+					    connection_id_list[i], &poll_status[i]);
+
                 if(real_addr_list[i])
                 {
 			if(copy_to_user(local_addr + curr_accumulate, real_addr_list[i], curr_length))
@@ -924,10 +1001,45 @@ int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_
                 }
         }
 
-	if(priority)
-		liteapi_priority_handling(priority, PRIORITY_END, &priority_jiffies, PRIORITY_READ);
 	return 0;
 }
+
+int poll_sendcq_for_async_read(struct ib_cq *tar_cq, int connection_id)
+{
+        int ne, i;
+	struct ib_wc wc[32];
+
+        while(1) {
+		ne = ib_poll_cq(tar_cq, 32, wc);
+		if (ne < 0) {
+			pr_err("connection_id: %d err: %d\n",
+				connection_id, ne);
+			return ne;
+		}
+		if (ne == 0)
+			return 0;
+
+		//pr_info("   .. connection_id: %2d ne: %2d\n", connection_id, ne);
+                for (i = 0; i < ne; i++) {
+                        if (wc[i].status != IB_WC_SUCCESS)
+                                pr_err("%s: send request %lu failed as %d %s\n",
+					__func__, (unsigned long)wc[i].wr_id,
+					wc[i].status, ib_wc_status_msg(wc[i].status));
+
+			/*
+			 * This wr_id is essentially the poll pointer passed by
+			 * user, in the async_rdma_read syscall. (Transformed as
+			 * kernel virtual address, of course.)
+			 *
+			 * If wr_id is wrong, good luck.
+			 */
+                        if (wc[i].wr_id)
+                                *(int*)wc[i].wr_id = -wc[i].status;
+		}
+	}
+	return 0;
+}
+
 int liteapi_rdma_write_offset_imm(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int imm)
 {
 	int target_node;
