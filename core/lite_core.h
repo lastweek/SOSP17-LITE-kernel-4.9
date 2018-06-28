@@ -42,10 +42,13 @@
 //#define SHARE_POLL_CQ_MODEL
 #define NON_SHARE_POLL_CQ_MODEL
 
-int __client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int offset, int userspace_flag, int *poll_addr, const char *func, int line);
+int __client_send_request(ltc *ctx, int connection_id, enum mode s_mode, struct lmr_info *input_mr, void *addr, int size, int offset, int userspace_flag, int *poll_addr, const char *func, int line, bool unsignaled);
 
-#define client_send_request(a,b,c,d,e,f,g,h,i)		\
-	__client_send_request(a,b,c,d,e,f,g,h,i, __func__, __LINE__)
+#define client_send_request(a,b,c,d,e,f,g,h,i)				\
+	__client_send_request(a,b,c,d,e,f,g,h,i, __func__, __LINE__, false)
+
+#define client_send_request_unsignaled(a,b,c,d,e,f,g,h,i)		\
+	__client_send_request(a,b,c,d,e,f,g,h,i, __func__, __LINE__, true)
 
 int client_connect_ctx(ltc *ctx, int connection_id, int port, int my_psn, enum ib_mtu mtu, int sl, struct lite_dest *dest);
 

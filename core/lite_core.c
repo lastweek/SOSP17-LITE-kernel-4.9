@@ -3950,7 +3950,7 @@ int client_send_cq_poller(ltc *ctx)
 int __client_send_request(ltc *ctx, int connection_id, enum mode s_mode,
 			  struct lmr_info *input_mr, void *addr, int size,
 			  int offset, int userspace_flag, int *poll_addr,
-			  const char *func, int line)
+			  const char *func, int line, bool unsignaled)
 {
 	struct ib_rdma_wr rdma_wr;
 	struct ib_send_wr *wr, *bad_wr = NULL;
@@ -3971,7 +3971,7 @@ retry_send_request:
 	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
-	wr->send_flags = IB_SEND_SIGNALED;
+	wr->send_flags = unsignaled ? 0 : IB_SEND_SIGNALED;
 
 	/* Remote memory info */
 	rdma_wr.remote_addr = (uintptr_t) (input_mr->addr+offset);
@@ -4002,7 +4002,7 @@ retry_send_request:
 
 	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
 	if (!ret) {
-                if (!poll_addr) {
+                if (!poll_addr && !unsignaled) {
 			client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
 			if (poll_status)
 				goto retry_send_request;
