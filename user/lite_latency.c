@@ -63,10 +63,14 @@ static void rdma_write_read()
 	int testsize[10]={8,64,512,1024,1024*2,1024*4,1024*8, 1024*16, 1024*32, 1024*64};
 	int password=100;
 	char *buf;
+	int *poll;
 
 	buf = aligned_alloc(pg_size, MAX_BUF_SIZE);
 	if (!buf)
 		die("oom");
+
+	poll = malloc(4 * NR_TESTS_PER_SIZE);
+	memset(poll, 0, 4 * NR_TESTS_PER_SIZE);
 
 	memset(buf, 'A', 1024 * 64);
 
@@ -91,7 +95,7 @@ static void rdma_write_read()
 			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
 	}
 
-	printf(" Test RDMA Read (avg of # %d run)\n", NR_TESTS_PER_SIZE);
+	printf(" Test RDMA Sync Read (avg of # %d run)\n", NR_TESTS_PER_SIZE);
 	for (i = 0; i < ARRAY_SIZE(testsize); i++) {
 		struct timespec start, end;
 		long diff_ns;
@@ -99,6 +103,23 @@ static void rdma_write_read()
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		for (j = 0; j < NR_TESTS_PER_SIZE; j++) {
 			userspace_liteapi_rdma_read(test_key, buf, testsize[i], 0, password);
+		}
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		diff_ns = timespec_diff_ns(end, start);
+
+		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns\n",
+			sched_getcpu(),
+			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
+	}
+
+	printf(" Test RDMA Async Read (avg of # %d run)\n", NR_TESTS_PER_SIZE);
+	for (i = 0; i < ARRAY_SIZE(testsize); i++) {
+		struct timespec start, end;
+		long diff_ns;
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		for (j = 0; j < NR_TESTS_PER_SIZE; j++) {
+			async_rdma_read(test_key, buf, testsize[i], 0, &poll[i]);
 		}
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		diff_ns = timespec_diff_ns(end, start);
