@@ -17,6 +17,7 @@ struct lite_hooks
 
 	int		(*lite_rdma_asywrite)(uint64_t, void*, int, int, int);
 	int		(*lite_rdma_read)(uint64_t, void*, int, int, int, int);
+	int		(*lite_rdma_read_async)(uint64_t, void*, int, int, int, int *);
 	uint64_t	(*lite_ask_lmr)(int, uint64_t, uint64_t, int);
 	uint64_t	(*lite_dist_barrier)(unsigned int);
 	int		(*lite_add_ask_mr_table)(uint64_t, uint64_t, uint64_t, int);

@@ -13,6 +13,7 @@ static int 	(*lite_rdma_synwrite_hook)(uint64_t, void*, int, int, int, int);
 
 static int 	(*lite_rdma_asywrite_hook)(uint64_t, void*, int, int, int);
 static int 	(*lite_rdma_read_hook)(uint64_t, void*, int, int, int, int);
+static int 	(*lite_rdma_read_aync_hook)(uint64_t, void*, int, int, int, int *);
 static uint64_t	(*lite_ask_lmr_hook)(int, uint64_t, uint64_t, int);
 static uint64_t	(*lite_dist_barrier_hook)(unsigned int);
 static int	(*lite_add_ask_mr_table_hook)(uint64_t, uint64_t, uint64_t, int);
@@ -47,6 +48,7 @@ int register_lite_hooks(const struct lite_hooks *hooks)
 			!hooks->lite_rdma_synwrite ||
 			!hooks->lite_rdma_asywrite ||
 			!hooks->lite_rdma_read ||
+			!hooks->lite_rdma_read_async ||
 			!hooks->lite_ask_lmr ||
 			!hooks->lite_add_ask_mr_table ||
 			!hooks->lite_compare_swp ||
@@ -76,6 +78,7 @@ int register_lite_hooks(const struct lite_hooks *hooks)
 	lite_rdma_synwrite_hook = hooks->lite_rdma_synwrite;
 	lite_rdma_asywrite_hook = hooks->lite_rdma_asywrite;
 	lite_rdma_read_hook = hooks->lite_rdma_read;
+	lite_rdma_read_async_hook = hooks->lite_rdma_read_async;
 	lite_ask_lmr_hook = hooks->lite_ask_lmr;
 	lite_dist_barrier_hook = hooks->lite_dist_barrier;
 	lite_add_ask_mr_table_hook = hooks->lite_add_ask_mr_table;
@@ -257,6 +260,7 @@ SYSCALL_DEFINE5(lite_rdma_asywrite,unsigned long, lite_handler,
 	}
 	return -EFAULT;
 }
+
 SYSCALL_DEFINE6(lite_rdma_read,    unsigned long, lite_handler,
 				  void __user *, local_addr,
 				  unsigned int,  size,
@@ -266,21 +270,6 @@ SYSCALL_DEFINE6(lite_rdma_read,    unsigned long, lite_handler,
 {
 	if(likely(lite_rdma_read_hook))
 	{
-		/*void *output;
-		int ret;
-		output = kmalloc(size, GFP_KERNEL);
-		ret = lite_rdma_read_hook(lite_handler, output, size, priority, offset, password);
-		if(ret)
-		{
-			kfree(output);
-			return -EFAULT;
-		}
-		if(copy_to_user(local_addr, output, size))
-		{
-			kfree(output);
-			return -EFAULT;
-		}
-		kfree(output);*/
 		int ret;
 		ret = lite_rdma_read_hook(lite_handler, local_addr, size, priority, offset, password);
 		if(ret)
@@ -292,6 +281,28 @@ SYSCALL_DEFINE6(lite_rdma_read,    unsigned long, lite_handler,
 	}
 	return -EFAULT;
 }
+
+SYSCALL_DEFINE6(lite_rdma_read_async,    unsigned long, lite_handler,
+				  void __user *, local_addr,
+				  unsigned int,  size,
+				  unsigned int,  priority,
+				  unsigned int,  offset,
+				  int __user *, poll)
+{
+	if(likely(lite_rdma_read_async_hook))
+	{
+		int ret;
+		ret = lite_rdma_read_async_hook(lite_handler, local_addr, size, priority, offset, poll);
+		if(ret)
+		{
+			return -EFAULT;
+		}
+		return 0;
+
+	}
+	return -EFAULT;
+}
+
 SYSCALL_DEFINE4(lite_ask_lmr,     int,  memory_space_owner_node,
 				  uint64_t, identifier,
 				  uint64_t, permission,

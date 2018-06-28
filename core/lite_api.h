@@ -56,6 +56,8 @@ int liteapi_rdma_write_offset(uint64_t lite_handler, void *local_addr, int size,
 int liteapi_rdma_write_offset_userspace(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int password);
 int liteapi_rdma_read_offset(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int password);
 int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int password);
+int liteapi_rdma_read_async_offset_userspace(uint64_t lite_handler, void *local_addr,
+					     int size, int priority, int offset, int password);
 int liteapi_rdma_write_offset_multiplesge(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int sge_num, struct ib_sge *input_sge);
 //int liteapi_multi_send_reply(int number_of_target, int *target_array, struct atomic_struct *input_atomic, struct max_reply_msg* reply);
 long long get_time_difference(int tid, ktime_t inputtime);

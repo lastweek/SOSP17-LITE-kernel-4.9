@@ -715,9 +715,9 @@ EXPORT_SYMBOL(liteapi_rdma_write_offset_userspace);
  * @offset: request offset
  * @password: pin code of the lite_handler
  */
-int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int password)
+int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr,
+				       int size, int priority, int offset, int password)
 {
-	//test2 starts (ends in lite_internal.c takes 111ns)
 	int target_node;
 	int connection_id;
 	struct lmr_info *mr_addr;
@@ -739,21 +739,22 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 	memset(access_offset, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 	memset(accumulate_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
 
-
-	//test1 starts
 	mr_ptr = lmr_to_mr_metadata(lite_handler);
 	if(!mr_ptr)
 		return MR_ASK_REFUSE;
 	if(!(mr_ptr->permission & MR_READ_FLAG))
 		return MR_ASK_REFUSE;
+
 	if(mr_ptr->password != password)
 		return MR_ASK_REFUSE;
+
 	mr_addr_list = mr_ptr->datalist;
 	if(!mr_addr_list)
 		return MR_ASK_UNKNOWN;
-	//test1 ends - takes 30ns
+
 	if(priority)
 		liteapi_priority_handling(priority, PRIORITY_START, &priority_jiffies, PRIORITY_READ);
+
 	request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
 
 	for(i=0;i<request_length;i++) {
@@ -776,6 +777,7 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 				return -EFAULT;
 			continue;
 		}
+
 		connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
                 connection_id_list[i] = connection_id;
 
@@ -815,13 +817,117 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr, 
 			kfree(real_addr_list[i]);
                 }
         }
+
 	if(priority)
 		liteapi_priority_handling(priority, PRIORITY_END, &priority_jiffies, PRIORITY_READ);
-	//test4 ends
 	return 0;
 }
 EXPORT_SYMBOL(liteapi_rdma_read_offset_userspace);
 
+int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_addr,
+				       int size, int priority, int offset, int *poll)
+{
+	int target_node;
+	int connection_id;
+	struct lmr_info *mr_addr;
+	struct lmr_info **mr_addr_list;
+	int request_length;
+	int i, curr_index, curr_offset, curr_length, curr_accumulate;
+	struct hash_asyio_key *mr_ptr;
+	void *real_addr;
+        void *real_addr_list[LITE_MAX_MEMORY_BLOCK];
+	unsigned long phys_addr;
+	ltc *ctx = LITE_ctx;
+	struct ib_device *ibd = (struct ib_device *)ctx->context;
+	int access_index[LITE_MAX_MEMORY_BLOCK], access_length[LITE_MAX_MEMORY_BLOCK], access_offset[LITE_MAX_MEMORY_BLOCK], accumulate_length[LITE_MAX_MEMORY_BLOCK];
+        int poll_status[LITE_MAX_MEMORY_BLOCK], connection_id_list[LITE_MAX_MEMORY_BLOCK];
+	unsigned long priority_jiffies;
+
+	memset(access_index, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
+	memset(access_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
+	memset(access_offset, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
+	memset(accumulate_length, 0, sizeof(int)*LITE_MAX_MEMORY_BLOCK);
+
+	mr_ptr = lmr_to_mr_metadata(lite_handler);
+	if(!mr_ptr)
+		return MR_ASK_REFUSE;
+	if(!(mr_ptr->permission & MR_READ_FLAG))
+		return MR_ASK_REFUSE;
+
+	mr_addr_list = mr_ptr->datalist;
+	if(!mr_addr_list)
+		return MR_ASK_UNKNOWN;
+
+	if(priority)
+		liteapi_priority_handling(priority, PRIORITY_START, &priority_jiffies, PRIORITY_READ);
+
+	request_length = get_respected_index_and_length(offset, size, access_index, access_length, access_offset, accumulate_length);
+
+	for(i=0;i<request_length;i++) {
+		curr_index = access_index[i];
+		curr_length = access_length[i];
+		curr_offset = access_offset[i];
+		curr_accumulate = accumulate_length[i];
+		mr_addr = mr_addr_list[curr_index];
+                poll_status[i] = SEND_REPLY_WAIT;
+                real_addr_list[i]=0;
+                connection_id_list[i] = -1;
+
+		target_node = mr_addr->node_id;
+		if(target_node == ctx->node_id)//local access
+		{
+			void *real_addr;
+			real_addr = __va(mr_addr->addr + curr_offset);//get virtual addr from physical addr
+			//memcpy(local_addr, real_addr+offset, size);
+			if(copy_to_user(local_addr + curr_accumulate, real_addr, curr_length))
+				return -EFAULT;
+			continue;
+		}
+
+		connection_id = client_get_connection_by_atomic_number(ctx, target_node, priority);
+                connection_id_list[i] = connection_id;
+
+		if(lite_check_page_continuous(local_addr + curr_accumulate , curr_length, &phys_addr))//It's continuous
+		{
+			real_addr = (void *)phys_to_dma(ibd->dma_device, (phys_addr_t)phys_addr);
+			//printk(KERN_CRIT "%s: continuous %d\n", __func__, size);
+			client_send_request(ctx, connection_id, M_READ, mr_addr, real_addr, curr_length, curr_offset, LITE_USERSPACE_FLAG, &poll_status[i]);
+		}
+		else
+		{
+			real_addr_list[i] = kmalloc(curr_length, GFP_KERNEL);
+			client_send_request(ctx, connection_id, M_READ, mr_addr, real_addr_list[i], curr_length, curr_offset, LITE_KERNELSPACE_FLAG, &poll_status[i]);
+		}
+	}
+
+	for(i = 0; i < request_length;i++)
+        {
+                if(connection_id_list[i]<0)//local access
+                        continue;
+		curr_index = access_index[i];
+		curr_length = access_length[i];
+		curr_offset = access_offset[i];
+		curr_accumulate = accumulate_length[i];
+		mr_addr = mr_addr_list[curr_index];
+
+                client_internal_poll_sendcq(ctx->send_cq[connection_id_list[i]],
+					    connection_id_list[i],
+					    &poll_status[i]);
+                if(real_addr_list[i])
+                {
+			if(copy_to_user(local_addr + curr_accumulate, real_addr_list[i], curr_length))
+			{
+				kfree(real_addr_list[i]);
+				return -EFAULT;
+			}
+			kfree(real_addr_list[i]);
+                }
+        }
+
+	if(priority)
+		liteapi_priority_handling(priority, PRIORITY_END, &priority_jiffies, PRIORITY_READ);
+	return 0;
+}
 int liteapi_rdma_write_offset_imm(uint64_t lite_handler, void *local_addr, int size, int priority, int offset, int imm)
 {
 	int target_node;
@@ -2351,6 +2457,7 @@ static int __init ibv_init_module(void)
 	//import_lite_hooks.lite_rdma_read = liteapi_rdma_asyread_offset;
 	import_lite_hooks.lite_rdma_synwrite = liteapi_rdma_write_offset_userspace;
 	import_lite_hooks.lite_rdma_read = liteapi_rdma_read_offset_userspace;
+	import_lite_hooks.lite_rdma_read_async = liteapi_rdma_read_offset_userspace_async;
 
 	import_lite_hooks.lite_rdma_asywrite = liteapi_rdma_asywrite_offset;
 	import_lite_hooks.lite_ask_lmr = liteapi_ask_mr;
