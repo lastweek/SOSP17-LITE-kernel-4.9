@@ -1,18 +1,18 @@
-From 747ed04cb0523e192bb3112fb34c75f01a9e5d07 Mon Sep 17 00:00:00 2001
+From 83e10a13c45c3dc190442fc424632ef5b955f6f5 Mon Sep 17 00:00:00 2001
 From: Yizhou Shan <yizhous@vmware.com>
 Date: Tue, 29 May 2018 17:02:20 -0700
 Subject: [PATCH] lite patch for 4.9.103
 
 ---
  Makefile                               |   2 +-
- arch/x86/entry/syscalls/syscall_64.tbl |  31 ++
+ arch/x86/entry/syscalls/syscall_64.tbl |  32 ++
  include/linux/syscalls.h               |  39 ++
  lite-syscall/Makefile                  |   8 +
  lite-syscall/lite.h                    | 863 +++++++++++++++++++++++++++++++++
- lite-syscall/lite_syscall.c            | 585 ++++++++++++++++++++++
- lite-syscall/lite_syscall.h            |  46 ++
+ lite-syscall/lite_syscall.c            | 596 +++++++++++++++++++++++
+ lite-syscall/lite_syscall.h            |  47 ++
  mm/memory.c                            |   3 +
- 8 files changed, 1576 insertions(+), 1 deletion(-)
+ 8 files changed, 1589 insertions(+), 1 deletion(-)
  create mode 100644 lite-syscall/Makefile
  create mode 100644 lite-syscall/lite.h
  create mode 100644 lite-syscall/lite_syscall.c
@@ -32,10 +32,10 @@ index 6090f65..ffd4045 100644
  vmlinux-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(init-m) \
  		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \
 diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
-index e93ef0b..a3067aa 100644
+index e93ef0b..e5d076a 100644
 --- a/arch/x86/entry/syscalls/syscall_64.tbl
 +++ b/arch/x86/entry/syscalls/syscall_64.tbl
-@@ -339,6 +339,37 @@
+@@ -339,6 +339,38 @@
  330	common	pkey_alloc		sys_pkey_alloc
  331	common	pkey_free		sys_pkey_free
  
@@ -69,6 +69,7 @@ index e93ef0b..a3067aa 100644
 +424	common	lite_get_total_node	                sys_lite_get_total_node
 +425     common  lite_reply_and_receive_message          sys_lite_reply_and_receive_message
 +426     common  lite_join                               sys_lite_join
++427	common	lite_rdma_read_async		sys_lite_rdma_read_async
 +
  #
  # x32-specific system call numbers start at 512 to avoid cache impact
@@ -1006,10 +1007,10 @@ index 0000000..199d28d
 +#endif
 diff --git a/lite-syscall/lite_syscall.c b/lite-syscall/lite_syscall.c
 new file mode 100644
-index 0000000..ebd674c
+index 0000000..817b434
 --- /dev/null
 +++ b/lite-syscall/lite_syscall.c
-@@ -0,0 +1,585 @@
+@@ -0,0 +1,596 @@
 +
 +#include <linux/export.h>
 +#include <linux/kernel.h>
@@ -1025,6 +1026,7 @@ index 0000000..ebd674c
 +
 +static int 	(*lite_rdma_asywrite_hook)(uint64_t, void*, int, int, int);
 +static int 	(*lite_rdma_read_hook)(uint64_t, void*, int, int, int, int);
++static int 	(*lite_rdma_read_async_hook)(uint64_t, void*, int, int, int, int *);
 +static uint64_t	(*lite_ask_lmr_hook)(int, uint64_t, uint64_t, int);
 +static uint64_t	(*lite_dist_barrier_hook)(unsigned int);
 +static int	(*lite_add_ask_mr_table_hook)(uint64_t, uint64_t, uint64_t, int);
@@ -1059,6 +1061,7 @@ index 0000000..ebd674c
 +			!hooks->lite_rdma_synwrite ||
 +			!hooks->lite_rdma_asywrite ||
 +			!hooks->lite_rdma_read ||
++			!hooks->lite_rdma_read_async ||
 +			!hooks->lite_ask_lmr ||
 +			!hooks->lite_add_ask_mr_table ||
 +			!hooks->lite_compare_swp ||
@@ -1088,6 +1091,7 @@ index 0000000..ebd674c
 +	lite_rdma_synwrite_hook = hooks->lite_rdma_synwrite;
 +	lite_rdma_asywrite_hook = hooks->lite_rdma_asywrite;
 +	lite_rdma_read_hook = hooks->lite_rdma_read;
++	lite_rdma_read_async_hook = hooks->lite_rdma_read_async;
 +	lite_ask_lmr_hook = hooks->lite_ask_lmr;
 +	lite_dist_barrier_hook = hooks->lite_dist_barrier;
 +	lite_add_ask_mr_table_hook = hooks->lite_add_ask_mr_table;
@@ -1269,6 +1273,7 @@ index 0000000..ebd674c
 +	}
 +	return -EFAULT;
 +}
++
 +SYSCALL_DEFINE6(lite_rdma_read,    unsigned long, lite_handler,
 +				  void __user *, local_addr,
 +				  unsigned int,  size,
@@ -1278,21 +1283,6 @@ index 0000000..ebd674c
 +{
 +	if(likely(lite_rdma_read_hook))
 +	{
-+		/*void *output;
-+		int ret;
-+		output = kmalloc(size, GFP_KERNEL);
-+		ret = lite_rdma_read_hook(lite_handler, output, size, priority, offset, password);
-+		if(ret)
-+		{
-+			kfree(output);
-+			return -EFAULT;
-+		}
-+		if(copy_to_user(local_addr, output, size))
-+		{
-+			kfree(output);
-+			return -EFAULT;
-+		}
-+		kfree(output);*/
 +		int ret;
 +		ret = lite_rdma_read_hook(lite_handler, local_addr, size, priority, offset, password);
 +		if(ret)
@@ -1304,6 +1294,28 @@ index 0000000..ebd674c
 +	}
 +	return -EFAULT;
 +}
++
++SYSCALL_DEFINE6(lite_rdma_read_async,    unsigned long, lite_handler,
++				  void __user *, local_addr,
++				  unsigned int,  size,
++				  unsigned int,  priority,
++				  unsigned int,  offset,
++				  int __user *, poll)
++{
++	if(likely(lite_rdma_read_async_hook))
++	{
++		int ret;
++		ret = lite_rdma_read_async_hook(lite_handler, local_addr, size, priority, offset, poll);
++		if(ret)
++		{
++			return -EFAULT;
++		}
++		return 0;
++
++	}
++	return -EFAULT;
++}
++
 +SYSCALL_DEFINE4(lite_ask_lmr,     int,  memory_space_owner_node,
 +				  uint64_t, identifier,
 +				  uint64_t, permission,
@@ -1597,10 +1609,10 @@ index 0000000..ebd674c
 +}
 diff --git a/lite-syscall/lite_syscall.h b/lite-syscall/lite_syscall.h
 new file mode 100644
-index 0000000..e34151d
+index 0000000..440d7a6
 --- /dev/null
 +++ b/lite-syscall/lite_syscall.h
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,47 @@
 +#ifndef _INCLUDE_FIT_SYS_H
 +#define _INCLUDE_FIT_SYS_H
 +
@@ -1612,14 +1624,15 @@ index 0000000..e34151d
 +
 +struct lite_hooks
 +{
-+	
-+	uint64_t 	(*lite_alloc_remote)(unsigned int, unsigned int, unsigned int, int);
-+	int 		(*lite_remote_memset)(uint64_t, int, int);
-+	int 		(*lite_fetch_add)(uint64_t, void*, unsigned long long, int);
-+	int 		(*lite_rdma_synwrite)(uint64_t, void*, int, int, int, int);
 +
-+	int 		(*lite_rdma_asywrite)(uint64_t, void*, int, int, int);
-+	int 		(*lite_rdma_read)(uint64_t, void*, int, int, int, int);
++	uint64_t	(*lite_alloc_remote)(unsigned int, unsigned int, unsigned int, int);
++	int		(*lite_remote_memset)(uint64_t, int, int);
++	int		(*lite_fetch_add)(uint64_t, void*, unsigned long long, int);
++	int		(*lite_rdma_synwrite)(uint64_t, void*, int, int, int, int);
++
++	int		(*lite_rdma_asywrite)(uint64_t, void*, int, int, int);
++	int		(*lite_rdma_read)(uint64_t, void*, int, int, int, int);
++	int		(*lite_rdma_read_async)(uint64_t, void*, int, int, int, int *);
 +	uint64_t	(*lite_ask_lmr)(int, uint64_t, uint64_t, int);
 +	uint64_t	(*lite_dist_barrier)(unsigned int);
 +	int		(*lite_add_ask_mr_table)(uint64_t, uint64_t, uint64_t, int);
@@ -1633,7 +1646,7 @@ index 0000000..e34151d
 +	int             (*lite_reply_message)(void *, int, uintptr_t, unsigned int);
 +	int		(*lite_get_node_id)(void);
 +	int		(*lite_get_total_node)(void);
-+	int      	(*lite_query_port)(int, int, int);
++	int		(*lite_query_port)(int, int, int);
 +	int		(*lite_alloc_continuous_memory)(unsigned long long, unsigned long);
 +	uint64_t	(*lite_wrap_alloc_for_remote_access)(void*, unsigned int, uint64_t, int);
 +	int		(*lite_create_lock)(int, void*);
