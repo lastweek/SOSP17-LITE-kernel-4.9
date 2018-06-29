@@ -56,11 +56,12 @@ static inline long timespec_diff_ns(struct timespec end, struct timespec start)
 	return e - s;
 }
 
+int testsize[] = {8,64,512,1024,1024*2,1024*4,1024*8};
+
 static void rdma_write_read()
 {
 	int i, j;
 	uint64_t test_key;
-	int testsize[10]={8,64,512,1024,1024*2,1024*4,1024*8, 1024*16, 1024*32, 1024*64};
 	int password=100;
 	char *buf;
 	int *poll;
@@ -78,10 +79,11 @@ static void rdma_write_read()
 						      MAX_BUF_SIZE, 0, password);
         printf("Finish remote mem alloc. Key: %#lx %ld\n", test_key, test_key);
 
-	printf(" Test RDMA Write (avg of # %d run)\n", NR_TESTS_PER_SIZE);
+	printf(" \033[31mTest RDMA Write (avg of # %d run)\033[0m\n", NR_TESTS_PER_SIZE);
 	for (i = 0; i < ARRAY_SIZE(testsize); i++) {
 		struct timespec start, end;
 		long diff_ns;
+		double rps;
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		for (j = 0; j < NR_TESTS_PER_SIZE; j++) {
@@ -90,15 +92,18 @@ static void rdma_write_read()
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		diff_ns = timespec_diff_ns(end, start);
 
-		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns\n",
+		rps = (double)NR_TESTS_PER_SIZE / ((double)diff_ns / (double)NSEC_PER_SEC);
+		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns RPS: %15lf\n",
 			sched_getcpu(),
-			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
+			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE,
+			rps);
 	}
 
-	printf(" Test RDMA Sync Read (avg of # %d run)\n", NR_TESTS_PER_SIZE);
+	printf(" \033[31mTest RDMA Sync Read (avg of # %d run)\033[0m\n", NR_TESTS_PER_SIZE);
 	for (i = 0; i < ARRAY_SIZE(testsize); i++) {
 		struct timespec start, end;
 		long diff_ns;
+		double rps;
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		for (j = 0; j < NR_TESTS_PER_SIZE; j++) {
@@ -107,15 +112,18 @@ static void rdma_write_read()
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		diff_ns = timespec_diff_ns(end, start);
 
-		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns\n",
+		rps = (double)NR_TESTS_PER_SIZE / ((double)diff_ns / (double)NSEC_PER_SEC);
+		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns RPS: %15lf\n",
 			sched_getcpu(),
-			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
+			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE,
+			rps);
 	}
 
-	printf(" Test RDMA Async Read (avg of # %d run)\n", NR_TESTS_PER_SIZE);
+	printf(" \033[31mTest RDMA Async Read (avg of # %d run)\033[0m\n", NR_TESTS_PER_SIZE);
 	for (i = 0; i < ARRAY_SIZE(testsize); i++) {
 		struct timespec start, end;
 		long diff_ns;
+		double rps;
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		for (j = 0; j < NR_TESTS_PER_SIZE; j++) {
@@ -124,9 +132,11 @@ static void rdma_write_read()
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		diff_ns = timespec_diff_ns(end, start);
 
-		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns\n",
+		rps = (double)NR_TESTS_PER_SIZE / ((double)diff_ns / (double)NSEC_PER_SEC);
+		printf("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns RPS: %15lf\n",
 			sched_getcpu(),
-			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE);
+			testsize[i], testsize[i], diff_ns/NR_TESTS_PER_SIZE,
+			rps);
 	}
 }
 
