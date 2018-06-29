@@ -825,10 +825,72 @@ int liteapi_rdma_read_offset_userspace(uint64_t lite_handler, void *local_addr,
 EXPORT_SYMBOL(liteapi_rdma_read_offset_userspace);
 
 /*
- * increase only
+ * Async RDMA Read
+ *
+ * This is built based on sync read, and every operation is signaled.
+ * We choose this mechanism over unsignaled for no reason..
+ *
+ * Anyway. Since it is signaled, we need to cleanup the CQE generated
+ * at send_cq. Furthur due to we don't have another thread to help us
+ * clean the mess, we (the thread that is doing async read) have to
+ * poll send_cq itself, just like sync read way.
+ *
+ * We poll send_cq on every @ASYNC_READ_FORCE_POLL_LIMIT batch. Note
+ * that this is for per QP. Since we have @ASYNC_READ_FORCE_POLL_LIMIT
+ * waiting CQE at send_cq, we can do batch ib_poll_cq() as well.
+ *
+ * And that, my friend, is where @ASYNC_READ_NR_POLL_CQE introduced.
+ * Determins how many CQEs you want to poll on every ib_poll_cq() call.
+ * This must be smaller than @ASYNC_READ_FORCE_POLL_LIMIT.
+ *
+ *	- YS
  */
+#define ASYNC_READ_FORCE_POLL_LIMIT	(RECV_DEPTH/2)
+#define ASYNC_READ_NR_POLL_CQE		(ASYNC_READ_FORCE_POLL_LIMIT/4)
+
+int poll_sendcq_for_async_read(struct ib_cq *tar_cq, int connection_id)
+{
+	/*
+	 * HACK!!!
+	 *
+	 * It is a BAD practice to put a large array at kernel stack.
+	 * But who cares this API ;-)
+	 */
+	struct ib_wc wc[ASYNC_READ_NR_POLL_CQE];
+        int ne, i;
+
+        while(1) {
+		ne = ib_poll_cq(tar_cq, ASYNC_READ_NR_POLL_CQE, wc);
+		if (ne < 0) {
+			pr_err("connection_id: %d err: %d\n",
+				connection_id, ne);
+			return ne;
+		}
+		if (ne == 0)
+			return 0;
+
+                for (i = 0; i < ne; i++) {
+                        if (wc[i].status != IB_WC_SUCCESS)
+                                pr_err("%s: send request %lu failed as %d %s\n",
+					__func__, (unsigned long)wc[i].wr_id,
+					wc[i].status, ib_wc_status_msg(wc[i].status));
+
+			/*
+			 * This wr_id is essentially the poll pointer passed by
+			 * user, in the async_rdma_read syscall. (Transformed as
+			 * kernel virtual address, of course.)
+			 *
+			 * If wr_id is wrong, good luck.
+			 */
+                        if (wc[i].wr_id)
+                                *(int*)wc[i].wr_id = -wc[i].status;
+		}
+	}
+	return 0;
+}
+
+/* Increase only */
 atomic_t nr_batched_async_read[MAX_CONNECTION];
-int poll_sendcq_for_async_read(struct ib_cq *tar_cq, int connection_id);
 
 /*
  * The hook for async RDMA read.
@@ -930,7 +992,7 @@ int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_
 		 * Here, I choose RECV_DEPTH/2, can be other values as well.
 		 */
 		nr_batched = atomic_inc_return(&nr_batched_async_read[connection_id]);
-		if (nr_batched % (RECV_DEPTH/2) == 0) {
+		if (unlikely(nr_batched % ASYNC_READ_FORCE_POLL_LIMIT == 0)) {
 			force_poll = true;
 			async_enabled = false;
 		}
@@ -1001,42 +1063,6 @@ int liteapi_rdma_read_offset_userspace_async(uint64_t lite_handler, void *local_
                 }
         }
 
-	return 0;
-}
-
-int poll_sendcq_for_async_read(struct ib_cq *tar_cq, int connection_id)
-{
-        int ne, i;
-	struct ib_wc wc[32];
-
-        while(1) {
-		ne = ib_poll_cq(tar_cq, 32, wc);
-		if (ne < 0) {
-			pr_err("connection_id: %d err: %d\n",
-				connection_id, ne);
-			return ne;
-		}
-		if (ne == 0)
-			return 0;
-
-		//pr_info("   .. connection_id: %2d ne: %2d\n", connection_id, ne);
-                for (i = 0; i < ne; i++) {
-                        if (wc[i].status != IB_WC_SUCCESS)
-                                pr_err("%s: send request %lu failed as %d %s\n",
-					__func__, (unsigned long)wc[i].wr_id,
-					wc[i].status, ib_wc_status_msg(wc[i].status));
-
-			/*
-			 * This wr_id is essentially the poll pointer passed by
-			 * user, in the async_rdma_read syscall. (Transformed as
-			 * kernel virtual address, of course.)
-			 *
-			 * If wr_id is wrong, good luck.
-			 */
-                        if (wc[i].wr_id)
-                                *(int*)wc[i].wr_id = -wc[i].status;
-		}
-	}
 	return 0;
 }
 
