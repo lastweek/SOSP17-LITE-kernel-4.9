@@ -79,17 +79,20 @@ static int bind_thread(int cpu_id)
 
 int testsize[] = { 8, 64, 512, 1024, 1024 * 2, 1024 * 4, 1024 * 8 };
 
-static void print_rps(int size_idx, const char *who)
+static void print_rps(const char *who)
 {
-	int i;
+	int i, j;
 	double total = 0;
 
-	for (i = 0; i < nr_threads; i++)
-		total += per_rps[i];
-
-	printf("\033[31m nr_threads: %d, each thread performed #%d %s, avg throughput: %10lf size=%#10x (%10d)\033[0m\n",
-		nr_threads, NR_TESTS_PER_SIZE, who, total/nr_threads,
-		testsize[size_idx], testsize[size_idx]);
+	for (j = 0; j < ARRAY_SIZE(testsize); j++) {
+		total = 0;
+		for (i = 0; i < nr_threads; i++)
+			total += per_rps[j * nr_threads + i];
+	
+		printf("Per thread: #%d %s, throughput: \033[31m %10lf \033[0m size=%#10x (%10d)\n",
+			NR_TESTS_PER_SIZE, who, total/nr_threads,
+			testsize[j], testsize[j]);
+	}
 }
 
 static void *rdma_write_read(void *_info)
@@ -128,7 +131,7 @@ static void *rdma_write_read(void *_info)
 		printf("Finish remote mem alloc. Key: %#lx %ld\n",
 			test_key, test_key);
 
-		printf(" \033[31mTest RDMA Write (avg of # %d run)\033[0m\n",
+		printf(" \033[32mTest RDMA Write (avg of # %d run)\033[0m\n",
 	       		NR_TESTS_PER_SIZE);
 	}
 
@@ -149,13 +152,7 @@ static void *rdma_write_read(void *_info)
 		    (double)NR_TESTS_PER_SIZE / ((double)diff_ns /
 						 (double)NSEC_PER_SEC);
 
-		per_rps[info->tid] = rps;
-
-		/* Sync among threads */
-		if (pthread_barrier_wait(&thread_barrier) ==
-		    PTHREAD_BARRIER_SERIAL_THREAD) {
-			print_rps(i, "write");
-		}
+		per_rps[i * nr_threads + info->tid] = rps;
 
 #if 0
 		printf
@@ -167,7 +164,8 @@ static void *rdma_write_read(void *_info)
 
 	if (pthread_barrier_wait(&thread_barrier) ==
 	    PTHREAD_BARRIER_SERIAL_THREAD) {
-		printf(" \033[31mTest RDMA Sync Read (avg of # %d run)\033[0m\n",
+		print_rps("write");
+		printf(" \033[32mTest RDMA Sync Read (avg of # %d run)\033[0m\n",
 		       NR_TESTS_PER_SIZE);
 	}
 
@@ -187,15 +185,9 @@ static void *rdma_write_read(void *_info)
 		rps =
 		    (double)NR_TESTS_PER_SIZE / ((double)diff_ns /
 						 (double)NSEC_PER_SEC);
-		per_rps[info->tid] = rps;
+		per_rps[i * nr_threads + info->tid] = rps;
 
-		/* Sync among threads */
-		if (pthread_barrier_wait(&thread_barrier) ==
-		    PTHREAD_BARRIER_SERIAL_THREAD) {
-			print_rps(i, "sync_read");
-		}
-
-#if 1
+#if 0
 		printf
 		    ("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns RPS: %15lf\n",
 		     sched_getcpu(), testsize[i], testsize[i],
@@ -205,7 +197,8 @@ static void *rdma_write_read(void *_info)
 
 	if (pthread_barrier_wait(&thread_barrier) ==
 	    PTHREAD_BARRIER_SERIAL_THREAD) {
-		printf(" \033[31mTest RDMA Async Read (avg of # %d run)\033[0m\n",
+		print_rps("sync_read");
+		printf(" \033[33mTest RDMA Async Read (avg of # %d run)\033[0m\n",
 		       NR_TESTS_PER_SIZE);
 	}
 
@@ -225,19 +218,19 @@ static void *rdma_write_read(void *_info)
 		rps =
 		    (double)NR_TESTS_PER_SIZE / ((double)diff_ns /
 						 (double)NSEC_PER_SEC);
-		per_rps[info->tid] = rps;
+		per_rps[i * nr_threads + info->tid] = rps;
 
-		/* Sync among threads */
-		if (pthread_barrier_wait(&thread_barrier) ==
-		    PTHREAD_BARRIER_SERIAL_THREAD) {
-			print_rps(i, "async_read");
-		}
-#if 1
+#if 0
 		printf
 		    ("  CPU%2d  size = %#10x (%10d) avg_time = %15ld ns RPS: %15lf\n",
 		     sched_getcpu(), testsize[i], testsize[i],
 		     diff_ns / NR_TESTS_PER_SIZE, rps);
 #endif
+	}
+
+	if (pthread_barrier_wait(&thread_barrier) ==
+	    PTHREAD_BARRIER_SERIAL_THREAD) {
+		print_rps("async_read");
 	}
 }
 
@@ -289,7 +282,7 @@ int main(int argc, char *argv[])
 	pg_size = sysconf(_SC_PAGESIZE);
 
 	threads = malloc(sizeof(*threads) * nr_threads);
-	per_rps = malloc(sizeof(*per_rps) * nr_threads);
+	per_rps = malloc(sizeof(*per_rps) * nr_threads * ARRAY_SIZE(testsize));
 	info = malloc(sizeof(*info) * nr_threads);
 	memset(info, 0, sizeof(*info) * nr_threads);
 
