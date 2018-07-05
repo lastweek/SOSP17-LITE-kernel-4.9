@@ -88,7 +88,7 @@ static void ibv_add_one(struct ib_device *device)
 	pr_info("%s(): liteapi_dev=%p(%s) device=%p(%s)\n",
 		__func__, liteapi_dev, liteapi_dev ? liteapi_dev->name : " ", device, device->name);
 
-#if 0
+#if 1
 	if (liteapi_dev) {
 		pr_info(" skip\n");
 		return;
@@ -882,7 +882,7 @@ int poll_sendcq_for_async_read(struct ib_cq *tar_cq, int connection_id)
 			 *
 			 * If wr_id is wrong, good luck.
 			 */
-                        if (wc[i].wr_id)
+                        if (virt_addr_valid(wc[i].wr_id))
                                 *(int*)wc[i].wr_id = -wc[i].status;
 		}
 	}
