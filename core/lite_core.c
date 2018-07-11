@@ -1531,6 +1531,8 @@ int client_unregister_application(ltc *ctx, unsigned int designed_port)
 }
 EXPORT_SYMBOL(client_unregister_application);
 
+#define LITE_RECEIVE_NO_BLOCK	666
+
 /**
  * client_receive_message - processing a receive request (RPC-server)
  * @port: target port
@@ -1581,6 +1583,10 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	}
 
 	//Have a single try first, it it's a block call, have infinite try
+	/*
+	 * I don't understand the code below and I doubt the original non-block
+	 * code can work. So just to be safe, I'm trying to patch the first if.
+	 */
 	if(likely(block_call))
 	{
 		while(1)
@@ -1629,6 +1635,13 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                                 }
                                 spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
                         }
+
+			if (block_call == LITE_RECEIVE_NO_BLOCK) {
+				spin_unlock(&ctx->imm_perport_lock[port]);
+				kmem_cache_free(imm_message_metadata_cache, descriptor);
+				return INT_MAX;
+			}
+
 			#ifdef RECV_SCHEDULE_MODEL
 				schedule();
 			#endif
@@ -1654,20 +1667,8 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 			kmem_cache_free(imm_message_metadata_cache, descriptor);
 			return 0;
 		}
-		/*if(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))
-		{
-			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
-                        spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
-			list_del(&new_request->list);
-                        spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
-		}
-		else
-		{
-			spin_unlock(&ctx->imm_perport_lock[port]);
-			kmem_cache_free(imm_message_metadata_cache, descriptor);
-			return 0;
-		}*/
 	}
+
 	//test9 - starts (from get poll to return takes 50ns (8) and 173ns(4K))
 	offset = new_request->offset;
 	node_id = new_request->source_node_id;
