@@ -1,5 +1,6 @@
 #define PREFIX "LITE: "
 #include "lite_core.h"
+#include <linux/time.h>
 MODULE_AUTHOR("yiying, shinyeh");
 MODULE_LICENSE("GPL");
 
@@ -1591,6 +1592,19 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	{
 		while(1)
 		{
+			unsigned long start = jiffies;
+
+			/*
+			 * Timeout or killed by signal
+			 * no one wants a damn stuck syscall.
+			 */
+			if (time_after(jiffies, start + 60 * HZ) || signal_pending(current)) {
+				pr_info("%s(): timeout 60 sec\n", __func__);
+				spin_unlock(&ctx->imm_perport_lock[port]);
+				kmem_cache_free(imm_message_metadata_cache, descriptor);
+				return INT_MAX;
+			}
+
                         if(ctx->imm_waitqueue_perport_count_recv[port] < ctx->imm_waitqueue_perport_count_poll[port])
                         {
                                 new_tar = ctx->imm_waitqueue_perport[port];
@@ -1636,11 +1650,13 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                                 spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
                         }
 
+/*
 			if (block_call == LITE_RECEIVE_NO_BLOCK) {
 				spin_unlock(&ctx->imm_perport_lock[port]);
 				kmem_cache_free(imm_message_metadata_cache, descriptor);
 				return INT_MAX;
 			}
+*/
 
 			#ifdef RECV_SCHEDULE_MODEL
 				schedule();
