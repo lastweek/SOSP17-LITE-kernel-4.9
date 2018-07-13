@@ -1599,7 +1599,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 			 * no one wants a damn stuck syscall.
 			 */
 			if (time_after(jiffies, start + 60 * HZ) || signal_pending(current)) {
-				pr_info("%s(): timeout 60 sec\n", __func__);
+				pr_info("%s(): timeout 60 sec or SIGNAL pending\n", __func__);
 				spin_unlock(&ctx->imm_perport_lock[port]);
 				kmem_cache_free(imm_message_metadata_cache, descriptor);
 				return INT_MAX;
@@ -1650,23 +1650,23 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                                 spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
                         }
 
-/*
 			if (block_call == LITE_RECEIVE_NO_BLOCK) {
 				spin_unlock(&ctx->imm_perport_lock[port]);
 				kmem_cache_free(imm_message_metadata_cache, descriptor);
 				return INT_MAX;
 			}
-*/
 
-			#ifdef RECV_SCHEDULE_MODEL
-				schedule();
-			#endif
-			#ifdef RECV_CPURELAX_MODEL
-				cpu_relax();
-			#endif
-			#ifdef RECV_WAITQUEUE_MODEL
-				wait_event_interruptible_timeout(ctx->imm_receive_block_queue[port], !list_empty(&(ctx->imm_waitqueue_perport[port].list)), msecs_to_jiffies(10000));
-			#endif
+#ifdef RECV_SCHEDULE_MODEL
+			schedule();
+#endif
+#ifdef RECV_CPURELAX_MODEL
+			cpu_relax();
+#endif
+#ifdef RECV_WAITQUEUE_MODEL
+			wait_event_interruptible_timeout(ctx->imm_receive_block_queue[port],
+							 !list_empty(&(ctx->imm_waitqueue_perport[port].list)),
+							 msecs_to_jiffies(10000));
+#endif
 		}
 	}
 	else
