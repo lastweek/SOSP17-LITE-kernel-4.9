@@ -2008,8 +2008,15 @@ int client_query_port(ltc *ctx, int target_node, int designed_port, int requery_
 	wait_send_reply_id = SEND_REPLY_WAIT;
 	tempaddr = client_ib_reg_mr_addr(ctx, &input_mr_form, sizeof(struct ask_mr_form));
 	client_send_message_sge_UD(ctx, target_node, MSG_QUERY_PORT_1, (void *)tempaddr, sizeof(struct ask_mr_form), (uint64_t)reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
-	while(wait_send_reply_id==SEND_REPLY_WAIT)
+
+	while(wait_send_reply_id==SEND_REPLY_WAIT) {
+		if (signal_pending(current)) {
+			pr_info("%s(): SIGNAL pending. Return.\n", __func__);
+			return -EFAULT;
+		}
 		cpu_relax();
+	}
+
 	if(reply_mr_form->op_code == MR_ASK_SUCCESS)
 	{
 		port_node_key = (designed_port<<MAX_NODE_BIT) + target_node;

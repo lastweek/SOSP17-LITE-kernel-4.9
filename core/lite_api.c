@@ -1726,8 +1726,14 @@ uint64_t liteapi_dist_barrier(unsigned int check_num)
                 j0 = jiffies;
                 j1 = j0 + delay;
 
-	        while(wait_send_reply_id==SEND_REPLY_WAIT&&(time_before(jiffies, j1)))
+	        while (wait_send_reply_id==SEND_REPLY_WAIT && (time_before(jiffies, j1))) {
 			cpu_relax();
+
+			if (signal_pending(current)) {
+				pr_info("%s(): SIGNAL pending. Return.\n", __func__);
+				return -EFAULT;
+			}
+		}
                 if(wait_send_reply_id == SEND_REPLY_WAIT)
                 {
 			pr_crit("dist barrier timeout\n");
