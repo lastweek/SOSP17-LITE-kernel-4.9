@@ -1713,9 +1713,6 @@ uint64_t liteapi_dist_barrier(unsigned int check_num)
 	pr_crit("%s(): num_alive_nodes %d\n", __func__, num_alive_nodes);
 	for(i=1;i<=num_alive_nodes;i++)//skip CD
 	{
-                unsigned long j0,j1,delay;
-
-                delay = msecs_to_jiffies(10000);
 		if(i==ctx->node_id)
 			continue;
 
@@ -1723,10 +1720,8 @@ uint64_t liteapi_dist_barrier(unsigned int check_num)
 		tempaddr = client_ib_reg_mr_addr(ctx, &source, sizeof(int));
 
 		client_send_message_sge_UD(ctx, i, MSG_DIST_BARRIER, (void *)tempaddr, sizeof(int), (uint64_t)&output, (uint64_t)&wait_send_reply_id, priority);
-                j0 = jiffies;
-                j1 = j0 + delay;
 
-	        while (wait_send_reply_id==SEND_REPLY_WAIT && (time_before(jiffies, j1))) {
+	        while (wait_send_reply_id==SEND_REPLY_WAIT) {
 			cpu_relax();
 
 			if (signal_pending(current)) {
@@ -1741,22 +1736,26 @@ uint64_t liteapi_dist_barrier(unsigned int check_num)
                 }
 	}
 
-	#ifdef LITE_GET_TIME
-		getnstimeofday(&te);
-		diff = timespec_sub(te,ts);
-		printk("[%s] time-after send %lu\n", __func__, diff.tv_nsec);
-	#endif
-	//while(atomic_read(&ctx->dist_barrier_counter)<num_alive_nodes)
+#ifdef LITE_GET_TIME
+	getnstimeofday(&te);
+	diff = timespec_sub(te,ts);
+	printk("[%s] time-after send %lu\n", __func__, diff.tv_nsec);
+#endif
+
 	while(atomic_read(&ctx->dist_barrier_counter)<check_num)
 	{
 		schedule();
+
+		if (signal_pending(current))
+			return -EFAULT;
 	}
 	atomic_sub(check_num, &ctx->dist_barrier_counter);
-	#ifdef LITE_GET_TIME
-		getnstimeofday(&te);
-		diff = timespec_sub(te,ts);
-		printk("[%s] time-after receive %lu\n", __func__, diff.tv_nsec);
-	#endif
+
+#ifdef LITE_GET_TIME
+	getnstimeofday(&te);
+	diff = timespec_sub(te,ts);
+	printk("[%s] time-after receive %lu\n", __func__, diff.tv_nsec);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(liteapi_dist_barrier);
