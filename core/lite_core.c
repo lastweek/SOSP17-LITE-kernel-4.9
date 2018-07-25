@@ -1603,30 +1603,25 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	if(unlikely(ctx->imm_perport_reg_num[port]<0))//this port is either not opened or no one queried
 		return SEND_REPLY_PORT_NOT_OPENED;
 
+	descriptor = kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
+	if(unlikely(!descriptor)) {
+		printk(KERN_CRIT "%s: descriptor alloc fail\n", __func__);
+                return SEND_REPLY_FAIL;
+	}
+
 	while (1) {
 		if (spin_trylock(&ctx->imm_perport_lock[port]))
 			break;
+
+		if (block_call)
+			return SEND_REPLY_FAIL;
+
 		if (signal_pending(current)) {
-			pr_info("%s(): PID: %d killed by signal\n", __func__, current->pid);
+			pr_info("%s() PID %d killed\n", __func__, current->pid);
 			return SEND_REPLY_FAIL;
 		}
 	}
 
-        //Generate descriptor for future reply message, this part takes around 40-60ns, sometimes 100ns
-	descriptor = (struct imm_message_metadata *)kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
-	if(unlikely(!descriptor))
-	{
-		printk(KERN_CRIT "%s: descriptor alloc fail\n", __func__);
-		//descriptor = (struct imm_message_metadata *)kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
-		spin_unlock(&ctx->imm_perport_lock[port]);
-                return SEND_REPLY_FAIL;
-	}
-
-	//Have a single try first, it it's a block call, have infinite try
-	/*
-	 * I don't understand the code below and I doubt the original non-block
-	 * code can work. So just to be safe, I'm trying to patch the first if.
-	 */
 	if(likely(block_call))
 	{
 		while(1)
@@ -1770,6 +1765,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 		spin_unlock(&ctx->imm_perport_lock[port]);
 		return SEND_REPLY_PORT_NOT_OPENED;
 	}
+
 	//point to header within ring/buffer based on offset
 	tmp = (struct imm_message_metadata *)(current_hash_ptr->addr + offset);
 	get_size = tmp->size;
