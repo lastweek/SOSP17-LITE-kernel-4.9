@@ -1603,7 +1603,14 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 	if(unlikely(ctx->imm_perport_reg_num[port]<0))//this port is either not opened or no one queried
 		return SEND_REPLY_PORT_NOT_OPENED;
 
-	spin_lock(&ctx->imm_perport_lock[port]);
+	while (1) {
+		if (spin_trylock(&ctx->imm_perport_lock[port]))
+			break;
+		if (signal_pending(current)) {
+			pr_info("%s(): PID: %d killed by signal\n", __func__, current->pid);
+			return SEND_REPLY_FAIL;
+		}
+	}
 
         //Generate descriptor for future reply message, this part takes around 40-60ns, sometimes 100ns
 	descriptor = (struct imm_message_metadata *)kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
@@ -1859,7 +1866,6 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                         list_add_tail(&(pass->list), &request_list[QUEUE_ACK].list);
                         spin_unlock(&wq_lock[QUEUE_ACK]);
                 }
-                spin_unlock(&ctx->imm_perport_lock[port]);
         }
         //test11 ends
 	//test9 ends
@@ -1889,6 +1895,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
                 }
 	        kmem_cache_free(imm_message_metadata_cache, descriptor);
         }
+	spin_unlock(&ctx->imm_perport_lock[port]);
 	return get_size;
 }
 EXPORT_SYMBOL(client_receive_message);
