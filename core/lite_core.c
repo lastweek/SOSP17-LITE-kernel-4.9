@@ -4072,7 +4072,7 @@ int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *ch
                         }
 
                         if((*check)!=SEND_REPLY_WAIT)
-                         	      break;
+				      break;
                 } while (ne < 1);
 
                 for (i = 0; i < ne; i++) {
@@ -4167,11 +4167,13 @@ inline int client_get_store_by_addr(ltc *ctx, void *addr)
         while (tar==IMM_NUM_OF_SEMAPHORE) {
 		if (signal_pending(current)) {
 			pr_info("%s(): PID:%d killed\n", __func__, current->pid);
-        		spin_unlock(&ctx->imm_store_semaphore_lock[0]);
+			spin_unlock(&ctx->imm_store_semaphore_lock[0]);
 			return -EINTR;
 		}
 
-                schedule();
+		spin_unlock(&ctx->imm_store_semaphore_lock[0]);
+                schedule() ;
+		spin_lock(&ctx->imm_store_semaphore_lock[0]);
                 tar = find_first_zero_bit(ctx->imm_store_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
         }
         set_bit(tar, ctx->imm_store_semaphore_bitmap);
@@ -4431,7 +4433,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 
 		/*
 		 * regular send-reply handling
-		 */ 
+		 */
                 if (ret_addr) {
 			if (lite_check_page_continuous(ret_addr, max_ret_size, &phys_addr) && !local_flag) {
 				userspace_reply_continuous = 1;
@@ -4450,7 +4452,7 @@ int client_send_reply_with_rdma_write_with_imm(ltc *ctx, int target_node, unsign
 				 * this is where kernel and userspace polling begins..
 				 * I mean, the set of variable!
 				 */
-			    	userspace_retlength_continuous = 1;
+				userspace_retlength_continuous = 1;
                                 real_retlength_vaddr = phys_to_virt(phys_addr);
                                 *(int *)real_retlength_vaddr = SEND_REPLY_WAIT;
                                 ctx->imm_store_semaphore[store_id] = real_retlength_vaddr;
