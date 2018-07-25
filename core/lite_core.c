@@ -1681,7 +1681,7 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 		{
 			spin_unlock(&ctx->imm_perport_lock[port]);
 			kmem_cache_free(imm_message_metadata_cache, descriptor);
-			return 0;
+			return INT_MAX;
 		}
 	}
 
@@ -4164,7 +4164,13 @@ inline int client_get_store_by_addr(ltc *ctx, void *addr)
         spin_lock(&ctx->imm_store_semaphore_lock[0]);
 
         tar = find_first_zero_bit(ctx->imm_store_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
-        while(tar==IMM_NUM_OF_SEMAPHORE) {
+        while (tar==IMM_NUM_OF_SEMAPHORE) {
+		if (signal_pending(current)) {
+			pr_info("%s(): PID:%d killed\n", __func__, current->pid);
+        		spin_unlock(&ctx->imm_store_semaphore_lock[0]);
+			return -EINTR;
+		}
+
                 schedule();
                 tar = find_first_zero_bit(ctx->imm_store_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
         }
