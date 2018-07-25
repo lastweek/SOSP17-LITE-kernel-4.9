@@ -866,10 +866,31 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 
 	ctx->imm_store_semaphore = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
+	if (!ctx->imm_store_semaphore) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
 	ctx->imm_store_header = (struct imm_message_metadata *)kmalloc(sizeof(struct imm_message_metadata)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
+	if (!ctx->imm_store_header) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
 	ctx->imm_store_semaphore_bitmap = kzalloc(sizeof(unsigned long) * BITS_TO_LONGS(IMM_NUM_OF_SEMAPHORE), GFP_KERNEL);
+	if (!ctx->imm_store_semaphore_bitmap) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
         atomic_set(&ctx->imm_store_semaphore_count, 0);
+
         ctx->imm_store_semaphore_lock = kmalloc(sizeof(spinlock_t)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
+	if (!ctx->imm_store_semaphore_lock) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
         for(i=0;i<IMM_NUM_OF_SEMAPHORE;i++)
         {
 		spin_lock_init(&ctx->imm_store_semaphore_lock[i]);
@@ -891,9 +912,20 @@ ltc *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
 	}
 
 	ctx->imm_store_block_queue = (wait_queue_head_t*)kmalloc((IMM_NUM_OF_SEMAPHORE)*sizeof(wait_queue_head_t), GFP_KERNEL);
+	if (!ctx->imm_store_block_queue) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
 	for(i=0;i<IMM_NUM_OF_SEMAPHORE;i++)
 	        init_waitqueue_head(&ctx->imm_store_block_queue[i]);
+
 	ctx->imm_store_semaphore_task = (struct task_struct **)kzalloc(sizeof(struct task_struct*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
+	if (!ctx->imm_store_semaphore_task) {
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
 
 	//Lock related
 	atomic_set(&ctx->lock_num, 0);

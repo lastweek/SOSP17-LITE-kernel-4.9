@@ -282,7 +282,15 @@ static inline void lite_dp(const char *fmt, ...)
 #define IMM_GET_OPCODE		0x0f000000
 #define IMM_GET_OPCODE_NUMBER(imm) (imm<<4)>>28
 #define IMM_DATA_BIT 32
-#define IMM_NUM_OF_SEMAPHORE 64
+
+/*
+ * HACK!!!
+ *
+ * I guess no one has told you before.
+ * This number determins the maximum number of outstanding sends.
+ */
+#define IMM_NUM_OF_SEMAPHORE 512
+
 #define IMM_MAX_PORT 64
 #define IMM_MAX_PORT_BIT 6
 #define IMM_MAX_PORT_BITMASK 0x3F
