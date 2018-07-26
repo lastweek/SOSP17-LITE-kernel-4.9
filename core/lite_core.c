@@ -1613,11 +1613,12 @@ int client_receive_message(ltc *ctx, unsigned int port, void *ret_addr, int rece
 		if (spin_trylock(&ctx->imm_perport_lock[port]))
 			break;
 
-		if (block_call)
+		if (!block_call)
 			return SEND_REPLY_FAIL;
 
 		if (signal_pending(current)) {
-			pr_info("%s() PID %d killed\n", __func__, current->pid);
+			pr_info("%s() PID %d killed spin_is_locked: %d\n",
+				__func__, current->pid, spin_is_locked(&ctx->imm_perport_lock[port]));
 			return SEND_REPLY_FAIL;
 		}
 	}
